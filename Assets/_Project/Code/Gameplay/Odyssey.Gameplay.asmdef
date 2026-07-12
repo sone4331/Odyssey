@@ -1,0 +1,16 @@
+{
+  "name": "Odyssey.Gameplay",
+  "rootNamespace": "Odyssey.Gameplay",
+  "references": [
+    "Odyssey.Core"
+  ],
+  "includePlatforms": [],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": true,
+  "defineConstraints": [],
+  "versionDefines": [],
+  "noEngineReferences": true
+}
