@@ -3,12 +3,12 @@ using System.Collections.Generic;
 
 namespace Odyssey.Core.FSM
 {
-    public sealed class StateMachine<TStateId>
+    public sealed class DeferredStateMachine<TStateId>
     {
         private readonly IReadOnlyDictionary<TStateId, IState<TStateId>> _states;
         private IState<TStateId> _currentState;
 
-        public StateMachine(IReadOnlyDictionary<TStateId, IState<TStateId>> states)
+        public DeferredStateMachine(IReadOnlyDictionary<TStateId, IState<TStateId>> states)
         {
             _states = states ?? throw new ArgumentNullException(nameof(states));
         }

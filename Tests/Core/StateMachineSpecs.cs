@@ -19,7 +19,7 @@ internal static class StateMachineSpecs
     private static void SelfTransitionDoesNotReenterState()
     {
         var idle = new RecordingState(StateId.Idle);
-        var machine = new StateMachine<StateId>(new Dictionary<StateId, IState<StateId>>
+        var machine = new DeferredStateMachine<StateId>(new Dictionary<StateId, IState<StateId>>
         {
             [StateId.Idle] = idle
         });
@@ -35,7 +35,7 @@ internal static class StateMachineSpecs
     {
         var idle = new RecordingState(StateId.Moving);
         var moving = new RecordingState();
-        var machine = new StateMachine<StateId>(new Dictionary<StateId, IState<StateId>>
+        var machine = new DeferredStateMachine<StateId>(new Dictionary<StateId, IState<StateId>>
         {
             [StateId.Idle] = idle,
             [StateId.Moving] = moving
