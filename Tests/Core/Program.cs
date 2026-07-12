@@ -10,6 +10,7 @@ internal static class Program
         SaveMigrationSpecs.Register();
         AtomicFileSaveServiceSpecs.Register();
         ConfigDatabaseSpecs.Register();
+        CsvTableParserSpecs.Register();
         return Spec.Complete();
     }
 }
