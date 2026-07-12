@@ -17,9 +17,9 @@ namespace Odyssey.Gameplay.Combat
 
         public DamageResult Apply(DamageRequest request)
         {
-            if (IsDead)
+            if (IsDead || request.Amount <= 0)
             {
-                return new DamageResult(false, 0, true);
+                return new DamageResult(false, 0, IsDead);
             }
 
             var previous = Current;

@@ -1,3 +1,4 @@
+using System;
 using Odyssey.Core.Tags;
 
 internal static class GameplayTagSpecs
@@ -6,6 +7,12 @@ internal static class GameplayTagSpecs
     {
         Spec.Run("tag_set_matches_parent_tag", TagSetMatchesParentTag);
         Spec.Run("tag_set_removes_exact_tag", TagSetRemovesExactTag);
+        Spec.Run("empty_gameplay_tag_is_rejected", EmptyGameplayTagIsRejected);
+    }
+
+    private static void EmptyGameplayTagIsRejected()
+    {
+        Spec.Throws<ArgumentException>(() => GameplayTag.Parse("  "), "empty gameplay tag was accepted");
     }
 
     private static void TagSetMatchesParentTag()

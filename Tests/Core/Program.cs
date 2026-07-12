@@ -6,6 +6,9 @@ internal static class Program
         GameplayTagSpecs.Register();
         AbilitySystemSpecs.Register();
         HealthSpecs.Register();
+        UtilityGoalSelectorSpecs.Register();
+        SaveMigrationSpecs.Register();
+        ConfigDatabaseSpecs.Register();
         return Spec.Complete();
     }
 }

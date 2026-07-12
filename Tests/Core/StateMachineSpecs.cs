@@ -13,6 +13,22 @@ internal static class StateMachineSpecs
     public static void Register()
     {
         Spec.Run("transition_is_committed_after_tick_returns", TransitionIsCommittedAfterTickReturns);
+        Spec.Run("self_transition_does_not_reenter_state", SelfTransitionDoesNotReenterState);
+    }
+
+    private static void SelfTransitionDoesNotReenterState()
+    {
+        var idle = new RecordingState(StateId.Idle);
+        var machine = new StateMachine<StateId>(new Dictionary<StateId, IState<StateId>>
+        {
+            [StateId.Idle] = idle
+        });
+        machine.Initialize(StateId.Idle);
+
+        machine.Tick(0.016f);
+
+        Spec.Equal(1, idle.EnterCount, "self transition re-entered state");
+        Spec.Equal(0, idle.ExitCount, "self transition exited state");
     }
 
     private static void TransitionIsCommittedAfterTickReturns()

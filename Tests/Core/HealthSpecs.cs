@@ -7,6 +7,7 @@ internal static class HealthSpecs
         Spec.Run("damage_is_clamped_at_zero", DamageIsClampedAtZero);
         Spec.Run("health_changed_reports_applied_damage", HealthChangedReportsAppliedDamage);
         Spec.Run("dead_target_rejects_additional_damage", DeadTargetRejectsAdditionalDamage);
+        Spec.Run("non_positive_damage_is_rejected", NonPositiveDamageIsRejected);
     }
 
     private static void DamageIsClampedAtZero()
@@ -42,5 +43,15 @@ internal static class HealthSpecs
 
         Spec.True(!result.Accepted, "dead target accepted additional damage");
         Spec.Equal(0, result.AppliedAmount, "dead target applied additional damage");
+    }
+
+    private static void NonPositiveDamageIsRejected()
+    {
+        var health = new Health(5);
+
+        var result = health.Apply(new DamageRequest(0, "enemy"));
+
+        Spec.True(!result.Accepted, "zero damage request was accepted");
+        Spec.Equal(5, health.Current, "zero damage changed health");
     }
 }
