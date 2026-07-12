@@ -8,6 +8,7 @@ internal static class Program
         HealthSpecs.Register();
         UtilityGoalSelectorSpecs.Register();
         SaveMigrationSpecs.Register();
+        AtomicFileSaveServiceSpecs.Register();
         ConfigDatabaseSpecs.Register();
         return Spec.Complete();
     }

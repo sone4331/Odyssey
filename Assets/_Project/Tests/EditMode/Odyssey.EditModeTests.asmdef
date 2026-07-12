@@ -1,0 +1,25 @@
+{
+  "name": "Odyssey.EditModeTests",
+  "rootNamespace": "Odyssey.Tests",
+  "references": [
+    "Odyssey.Core",
+    "Odyssey.Gameplay",
+    "Odyssey.Unity"
+  ],
+  "includePlatforms": [
+    "Editor"
+  ],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": false,
+  "defineConstraints": [
+    "UNITY_INCLUDE_TESTS"
+  ],
+  "optionalUnityReferences": [
+    "TestAssemblies"
+  ],
+  "versionDefines": [],
+  "noEngineReferences": false
+}

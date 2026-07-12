@@ -1,0 +1,22 @@
+{
+  "name": "Odyssey.Editor",
+  "rootNamespace": "Odyssey.Editor",
+  "references": [
+    "Odyssey.Core",
+    "Odyssey.Gameplay",
+    "Odyssey.Unity",
+    "UnityEngine.TestRunner",
+    "UnityEditor.TestRunner"
+  ],
+  "includePlatforms": [
+    "Editor"
+  ],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": true,
+  "defineConstraints": [],
+  "versionDefines": [],
+  "noEngineReferences": false
+}
