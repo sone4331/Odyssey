@@ -5,6 +5,7 @@ using Odyssey.Core.Tags;
 using Odyssey.Gameplay.AI;
 using Odyssey.Gameplay.Combat;
 using Odyssey.Unity.Save;
+using Odyssey.Unity.UI;
 
 namespace Odyssey.Tests
 {
@@ -67,11 +68,47 @@ namespace Odyssey.Tests
             Assert.That(selector.Select(0f).Goal, Is.EqualTo("chase"));
         }
 
+        [Test]
+        public void HealthDisplayPresenter_RefreshesFromEventsAndFlashesOnlyOnDamage()
+        {
+            var view = new RecordingHealthDisplay();
+            var presenter = new HealthDisplayPresenter(view, 5);
+
+            presenter.Initialize(5);
+            presenter.Handle(new HealthChanged(5, 3, "enemy"));
+            presenter.Handle(new HealthChanged(3, 4, "heal"));
+
+            Assert.That(view.Current, Is.EqualTo(4));
+            Assert.That(view.Maximum, Is.EqualTo(5));
+            Assert.That(view.RefreshCount, Is.EqualTo(3));
+            Assert.That(view.DamageFlashCount, Is.EqualTo(1));
+        }
+
         [System.Serializable]
         private sealed class TestSaveData
         {
             public int Version;
             public int Health;
+        }
+
+        private sealed class RecordingHealthDisplay : IHealthDisplayView
+        {
+            public int Current { get; private set; }
+            public int Maximum { get; private set; }
+            public int RefreshCount { get; private set; }
+            public int DamageFlashCount { get; private set; }
+
+            public void SetHealth(int current, int maximum)
+            {
+                Current = current;
+                Maximum = maximum;
+                RefreshCount++;
+            }
+
+            public void ShowDamageFlash()
+            {
+                DamageFlashCount++;
+            }
         }
     }
 }
