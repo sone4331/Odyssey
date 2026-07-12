@@ -123,8 +123,7 @@ namespace Odyssey.Characters.Player
         }
         private void OnDash()
         {
-            // 检查冷却时间
-            if (Time.time - _core.LastDashTime > _core.GroundDashCooldown)
+            if (_core.TryActivateAbility(PlayerController.DashAbilityId))
             {
                 _core.StateMachine.ChangeState(new PlayerDashState(_core));
             }
@@ -132,8 +131,10 @@ namespace Odyssey.Characters.Player
         
         private void OnAttack()
         {
-            // 点击攻击键 -> 开启第 1 段攻击
-            _core.StateMachine.ChangeState(new PlayerAttackState(_core, 1));
+            if (_core.TryActivateAbility(PlayerController.AttackAbilityId))
+            {
+                _core.StateMachine.ChangeState(new PlayerAttackState(_core, 1));
+            }
         }
     }
 }

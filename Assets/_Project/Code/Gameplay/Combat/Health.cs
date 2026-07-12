@@ -28,5 +28,30 @@ namespace Odyssey.Gameplay.Combat
             Changed?.Invoke(new HealthChanged(previous, Current, request.SourceId));
             return new DamageResult(true, appliedAmount, IsDead);
         }
+
+        public int Restore(int amount, string sourceId)
+        {
+            if (amount <= 0 || Current >= Maximum)
+            {
+                return 0;
+            }
+
+            var previous = Current;
+            Current = Math.Min(Maximum, Current + amount);
+            Changed?.Invoke(new HealthChanged(previous, Current, sourceId));
+            return Current - previous;
+        }
+
+        public void Reset(string sourceId)
+        {
+            if (Current == Maximum)
+            {
+                return;
+            }
+
+            var previous = Current;
+            Current = Maximum;
+            Changed?.Invoke(new HealthChanged(previous, Current, sourceId));
+        }
     }
 }

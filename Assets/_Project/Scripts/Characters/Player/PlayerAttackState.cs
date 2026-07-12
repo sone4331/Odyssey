@@ -8,6 +8,7 @@ namespace Odyssey.Characters.Player
         private int _comboIndex;
         private bool _nextComboQueued;
         private bool _hasDealtDamage;
+        private bool _continuesCombo;
         private float _stateTimer;
 
         public PlayerAttackState(PlayerController controller, int comboIndex) : base(controller)
@@ -45,6 +46,10 @@ namespace Odyssey.Characters.Player
         {
             base.Exit();
             _core.InputReader.AttackEvent -= OnAttack;
+            if (!_continuesCombo)
+            {
+                _core.EndAbility(PlayerController.AttackAbilityId);
+            }
         }
 
         private void OnAttack() { _nextComboQueued = true; }
@@ -72,7 +77,9 @@ namespace Odyssey.Characters.Player
                 {
                     if (_nextComboQueued && _comboIndex < 4)
                     {
+                        _continuesCombo = true;
                         _core.StateMachine.ChangeState(new PlayerAttackState(_core, _comboIndex + 1));
+                        return;
                     }
                 }
 

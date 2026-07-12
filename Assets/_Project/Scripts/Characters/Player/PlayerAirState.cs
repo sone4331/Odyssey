@@ -146,7 +146,7 @@ namespace Odyssey.Characters.Player
 
         private void OnDash()
         {
-            if (_core.CanAirDash)
+            if (_core.CanAirDash && _core.TryActivateAbility(PlayerController.DashAbilityId))
             {
                 _core.StateMachine.ChangeState(new PlayerDashState(_core));
             }

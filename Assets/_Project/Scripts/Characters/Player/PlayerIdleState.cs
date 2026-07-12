@@ -20,6 +20,7 @@ namespace Odyssey.Characters.Player
         public override void Tick()
         {
             base.Tick();
+            if (_core.StateMachine.CurrentState != this) return;
             
             // 应用重力 (VerticalVelocity 此时是自然变化的)
             _core.Controller.Move(Vector3.up * _core.VerticalVelocity * Time.deltaTime);

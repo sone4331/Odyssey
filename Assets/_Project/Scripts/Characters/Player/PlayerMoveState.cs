@@ -18,6 +18,7 @@ namespace Odyssey.Characters.Player
         public override void Tick()
         {
             base.Tick(); // 执行父类的检测（比如跳跃、坠落检测）
+            if (_core.StateMachine.CurrentState != this) return;
 
             // 1. 获取移动输入
             Vector2 input = _core.InputReader.MovementValue;

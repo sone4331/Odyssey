@@ -97,7 +97,7 @@ namespace Odyssey.Systems
                 return;
             }
 
-            player.CurrentHealth = Mathf.Clamp(data.health, 0, player.MaxHealth);
+            player.SetHealth(data.health, "load");
             var controller = player.Controller;
             controller.enabled = false;
             player.transform.position = new Vector3(data.posX, data.posY, data.posZ);

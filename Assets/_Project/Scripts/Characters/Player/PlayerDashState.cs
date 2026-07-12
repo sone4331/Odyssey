@@ -35,8 +35,6 @@ namespace Odyssey.Characters.Player
                 _core.CanAirDash = false;
             }
 
-            // 3. 记录时间
-            _core.LastDashTime = Time.time;
         }
 
         public override void Tick()
@@ -65,6 +63,7 @@ namespace Odyssey.Characters.Player
         public override void Exit()
         {
             base.Exit();
+            _core.EndAbility(PlayerController.DashAbilityId);
             // 【关键】退出状态时，一定要把动画速度还原！
             _core.Animator.speed = 1f; 
         }

@@ -1,6 +1,10 @@
 using UnityEngine;
 using Odyssey.Inputs; // 引用我们的输入系统
 using Odyssey.Core.FSM; // 引用我们的核心状态机
+using Odyssey.Core.Abilities;
+using Odyssey.Core.Tags;
+using Odyssey.Gameplay.Combat;
+using UnityEngine.Serialization;
 
 namespace Odyssey.Characters.Player
 {
@@ -8,6 +12,10 @@ namespace Odyssey.Characters.Player
     [RequireComponent(typeof(CharacterController))]
     public class PlayerController : MonoBehaviour
     {
+        public const string AttackAbilityId = "player.attack";
+        public const string DashAbilityId = "player.dash";
+        public const string HitAbilityId = "player.hit";
+
         [Header("Config")]
         [Tooltip("输入信号源")]
         public InputReader InputReader; // 记得在Inspector里把 PlayerInputReader 拖进去
@@ -30,7 +38,6 @@ namespace Odyssey.Characters.Player
         [Header("Mechanics")]
         public bool CanAirJump = false;    
         public bool CanAirDash = false;    // [新增] 空中冲刺开关
-        public float LastDashTime;         // [新增] 记录上次冲刺时间
         
         [Header("Jump Settings")]
         public float JumpHeight = 3f;      // 普通跳/未蓄满的高度 (原先是4，按你要求改为3)
@@ -51,8 +58,10 @@ namespace Odyssey.Characters.Player
         public LayerMask EnemyLayer;     // 敌人的层级 (记得去 Inspector 勾选 Enemy)
         
         [Header("Health")]
-        public int MaxHealth = 5;
-        public int CurrentHealth = 5;
+        [FormerlySerializedAs("MaxHealth")]
+        [SerializeField] private int maxHealth = 5;
+        [FormerlySerializedAs("CurrentHealth")]
+        [SerializeField] private int startingHealth = 5;
         public bool IsInvincible = false; // 是否无敌
         
         [Header("Respawn Settings")]
@@ -66,6 +75,12 @@ namespace Odyssey.Characters.Player
         public CharacterController Controller { get; private set; }
         public Animator Animator { get; private set; }
         public Transform MainCameraTransform { get; private set; }
+        public int MaxHealth => maxHealth;
+        public int CurrentHealth => _health?.Current ?? Mathf.Clamp(startingHealth, 0, maxHealth);
+        public IAbilitySystem Abilities { get; private set; }
+        public event System.Action<HealthChanged> HealthChanged;
+
+        private Health _health;
         
         
         
@@ -77,6 +92,36 @@ namespace Odyssey.Characters.Player
             // 获取身上的组件
             Controller = GetComponent<CharacterController>();
             Animator = GetComponentInChildren<Animator>(); // 动画通常在子物体模型上
+
+            _health = new Health(Mathf.Max(1, maxHealth));
+            _health.Changed += change => HealthChanged?.Invoke(change);
+            var initialDamage = _health.Maximum - Mathf.Clamp(startingHealth, 0, _health.Maximum);
+            if (initialDamage > 0)
+            {
+                _health.Apply(new DamageRequest(initialDamage, "initial"));
+            }
+
+            Abilities = new AbilitySystem(new[]
+            {
+                new AbilityDefinition(
+                    AttackAbilityId,
+                    AttackCooldown,
+                    blockedTags: new[] { GameplayTag.Parse("State.Hit") },
+                    ownedTags: new[] { GameplayTag.Parse("Ability.Attack") }),
+                new AbilityDefinition(
+                    DashAbilityId,
+                    GroundDashCooldown,
+                    blockedTags: new[] { GameplayTag.Parse("State.Hit") },
+                    ownedTags: new[] { GameplayTag.Parse("Ability.Dash") }),
+                new AbilityDefinition(
+                    HitAbilityId,
+                    ownedTags: new[] { GameplayTag.Parse("State.Hit") },
+                    cancelTags: new[]
+                    {
+                        GameplayTag.Parse("Ability.Attack"),
+                        GameplayTag.Parse("Ability.Dash")
+                    })
+            });
             
             // 初始化状态机
             StateMachine = new StateMachine<PlayerController>();
@@ -129,10 +174,13 @@ namespace Odyssey.Characters.Player
             // 如果处于无敌状态，或者已经死了，就不再受伤
             if (IsInvincible || _isDead) return; 
 
-            CurrentHealth -= damage;
-            Debug.Log($"玩家受伤！剩余血量：{CurrentHealth}");
+            var damageResult = _health.Apply(new DamageRequest(damage, "enemy"));
+            if (!damageResult.Accepted)
+            {
+                return;
+            }
 
-            if (CurrentHealth <= 0)
+            if (damageResult.Killed)
             {
                 _isDead = true; // 标记为已死亡
                 Animator.SetTrigger("Die"); 
@@ -155,7 +203,33 @@ namespace Odyssey.Characters.Player
             // 【删除】这里不再需要写 CanAirJump = false 了，全部交给 HitState 处理
 
             transform.position += Vector3.up * 0.1f;
-            StateMachine.ChangeState(new PlayerHitState(this, knockbackMomentum));
+            if (TryActivateAbility(HitAbilityId))
+            {
+                StateMachine.ChangeState(new PlayerHitState(this, knockbackMomentum));
+            }
+        }
+
+        public bool TryActivateAbility(string abilityId)
+        {
+            return Abilities.TryActivate(abilityId, Time.time).Succeeded;
+        }
+
+        public void EndAbility(string abilityId)
+        {
+            Abilities.End(abilityId);
+        }
+
+        public void SetHealth(int value, string sourceId = "external")
+        {
+            var target = Mathf.Clamp(value, 0, MaxHealth);
+            if (target < _health.Current)
+            {
+                _health.Apply(new DamageRequest(_health.Current - target, sourceId));
+            }
+            else if (target > _health.Current)
+            {
+                _health.Restore(target - _health.Current, sourceId);
+            }
         }
         
         // 无敌帧计时器（协程）
@@ -179,7 +253,7 @@ namespace Odyssey.Characters.Player
             yield return new WaitForSeconds(RespawnDelay);
 
             // 3. 恢复满血，取消死亡标记
-            CurrentHealth = MaxHealth;
+            _health.Reset("respawn");
             _isDead = false;
 
             // 4. 【极度关键】传送 CharacterController 必须先将其禁用！

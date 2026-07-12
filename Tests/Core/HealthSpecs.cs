@@ -8,6 +8,8 @@ internal static class HealthSpecs
         Spec.Run("health_changed_reports_applied_damage", HealthChangedReportsAppliedDamage);
         Spec.Run("dead_target_rejects_additional_damage", DeadTargetRejectsAdditionalDamage);
         Spec.Run("non_positive_damage_is_rejected", NonPositiveDamageIsRejected);
+        Spec.Run("health_can_be_restored_without_exceeding_maximum", HealthCanBeRestoredWithoutExceedingMaximum);
+        Spec.Run("reset_restores_maximum_health", ResetRestoresMaximumHealth);
     }
 
     private static void DamageIsClampedAtZero()
@@ -53,5 +55,26 @@ internal static class HealthSpecs
 
         Spec.True(!result.Accepted, "zero damage request was accepted");
         Spec.Equal(5, health.Current, "zero damage changed health");
+    }
+
+    private static void HealthCanBeRestoredWithoutExceedingMaximum()
+    {
+        var health = new Health(5);
+        health.Apply(new DamageRequest(4, "enemy"));
+
+        health.Restore(10, "load");
+
+        Spec.Equal(5, health.Current, "restored health exceeded maximum");
+    }
+
+    private static void ResetRestoresMaximumHealth()
+    {
+        var health = new Health(5);
+        health.Apply(new DamageRequest(5, "enemy"));
+
+        health.Reset("respawn");
+
+        Spec.Equal(5, health.Current, "reset did not restore maximum health");
+        Spec.True(!health.IsDead, "reset health remained dead");
     }
 }

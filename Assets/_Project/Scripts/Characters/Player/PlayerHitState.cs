@@ -43,5 +43,11 @@ namespace Odyssey.Characters.Player
                     _core.StateMachine.ChangeState(new PlayerAirState(_core));
             }
         }
+
+        public override void Exit()
+        {
+            base.Exit();
+            _core.EndAbility(PlayerController.HitAbilityId);
+        }
     }
 }
