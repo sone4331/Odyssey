@@ -13,7 +13,7 @@ namespace Odyssey.Editor.Config
     {
         private const string PlayerCsvPath = "Assets/_Project/DesignData/Player.csv";
         private const string EnemyCsvPath = "Assets/_Project/DesignData/Enemy.csv";
-        private const string OutputDirectory = "Assets/_Project/Generated/Config";
+        private const string OutputDirectory = "Assets/_Project/Resources/Config";
         private const string OutputAssetPath = OutputDirectory + "/GameConfigDatabase.asset";
 
         [MenuItem("Odyssey/Config/Import All CSV")]

@@ -4,8 +4,10 @@ using Odyssey.Core.FSM;
 using Odyssey.Core.Tags;
 using Odyssey.Gameplay.AI;
 using Odyssey.Gameplay.Combat;
+using Odyssey.Gameplay.Config;
 using Odyssey.Unity.Save;
 using Odyssey.Unity.UI;
+using Odyssey.Unity.Config;
 
 namespace Odyssey.Tests
 {
@@ -84,6 +86,18 @@ namespace Odyssey.Tests
             Assert.That(view.DamageFlashCount, Is.EqualTo(1));
         }
 
+        [Test]
+        public void PlayerConfigBinder_AppliesSelectedConfigToRuntimeTarget()
+        {
+            var provider = new GameConfigDatabase(new PlayerConfigData("player", 7f, 11f));
+            var target = new RecordingPlayerConfigTarget();
+
+            PlayerConfigBinder.Bind(provider, "player", target);
+
+            Assert.That(target.Config.WalkSpeed, Is.EqualTo(7f));
+            Assert.That(target.Config.RunSpeed, Is.EqualTo(11f));
+        }
+
         [System.Serializable]
         private sealed class TestSaveData
         {
@@ -108,6 +122,16 @@ namespace Odyssey.Tests
             public void ShowDamageFlash()
             {
                 DamageFlashCount++;
+            }
+        }
+
+        private sealed class RecordingPlayerConfigTarget : IPlayerConfigTarget
+        {
+            public PlayerConfigData Config { get; private set; }
+
+            public void Apply(PlayerConfigData config)
+            {
+                Config = config;
             }
         }
     }

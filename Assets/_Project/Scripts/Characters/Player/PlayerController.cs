@@ -4,19 +4,22 @@ using Odyssey.Core.FSM; // 引用我们的核心状态机
 using Odyssey.Core.Abilities;
 using Odyssey.Core.Tags;
 using Odyssey.Gameplay.Combat;
+using Odyssey.Gameplay.Config;
+using Odyssey.Unity.Config;
 using UnityEngine.Serialization;
 
 namespace Odyssey.Characters.Player
 {
     // RequireComponent 确保你挂这个脚本时，Unity会自动帮你挂上 CharacterController
     [RequireComponent(typeof(CharacterController))]
-    public class PlayerController : MonoBehaviour
+    public class PlayerController : MonoBehaviour, IPlayerConfigTarget
     {
         public const string AttackAbilityId = "player.attack";
         public const string DashAbilityId = "player.dash";
         public const string HitAbilityId = "player.hit";
 
         [Header("Config")]
+        [SerializeField] private string configId = "player";
         [Tooltip("输入信号源")]
         public InputReader InputReader; // 记得在Inspector里把 PlayerInputReader 拖进去
         
@@ -76,6 +79,7 @@ namespace Odyssey.Characters.Player
         public Animator Animator { get; private set; }
         public Transform MainCameraTransform { get; private set; }
         public int MaxHealth => maxHealth;
+        public string ConfigId => configId;
         public int CurrentHealth => _health?.Current ?? Mathf.Clamp(startingHealth, 0, maxHealth);
         public IAbilitySystem Abilities { get; private set; }
         public event System.Action<HealthChanged> HealthChanged;
@@ -230,6 +234,17 @@ namespace Odyssey.Characters.Player
             {
                 _health.Restore(target - _health.Current, sourceId);
             }
+        }
+
+        public void Apply(PlayerConfigData config)
+        {
+            if (config == null)
+            {
+                throw new System.ArgumentNullException(nameof(config));
+            }
+
+            WalkSpeed = config.WalkSpeed;
+            RunSpeed = config.RunSpeed;
         }
         
         // 无敌帧计时器（协程）
