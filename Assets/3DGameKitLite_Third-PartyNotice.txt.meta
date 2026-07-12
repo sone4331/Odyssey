@@ -1,0 +1,14 @@
+fileFormatVersion: 2
+guid: 702e43600f5616c4c985f8bf481a4c75
+TextScriptImporter:
+  externalObjects: {}
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 135162
+  packageName: 3D Game Kit Lite
+  packageVersion: 1.8.2
+  assetPath: Assets/3DGameKitLite_Third-PartyNotice.txt
+  uploadId: 462213

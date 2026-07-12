@@ -1,0 +1,40 @@
+[Ll]ibrary/
+[Tt]emp/
+[Oo]bj/
+[Bb]uild/
+[Bb]uilds/
+[Ll]ogs/
+[Uu]ser[Ss]ettings/
+[Mm]emoryCaptures/
+
+.idea/
+.vs/
+.vscode/
+*.csproj
+*.sln
+*.user
+*.suo
+*.tmp
+*.pidb
+*.booproj
+*.svd
+*.pdb
+*.mdb
+*.opendb
+*.VC.db
+
+# Unity generated crash and profiling artifacts
+sysinfo.txt
+crashlytics-build.properties
+
+# Third-party sample content is restored from its original distribution.
+Assets/3DGamekitLite/
+Assets/TextMesh Pro/Examples & Extras/
+Assets/Polybrush Data/
+
+# Learning notes reference an external commercial project and are not portfolio source.
+/架构学习文档/
+
+# Local worktrees
+.worktrees/
+
