@@ -2,7 +2,7 @@ using UnityEngine;
 using Odyssey.Inputs; // 引用我们的输入系统
 using Odyssey.Core.FSM; // 引用我们的核心状态机
 using Odyssey.Core.Abilities;
-using Odyssey.Core.Tags;
+using Odyssey.Gameplay.Characters;
 using Odyssey.Gameplay.Combat;
 using Odyssey.Gameplay.Config;
 using Odyssey.Unity.Config;
@@ -14,9 +14,9 @@ namespace Odyssey.Characters.Player
     [RequireComponent(typeof(CharacterController))]
     public class PlayerController : MonoBehaviour, IPlayerConfigTarget
     {
-        public const string AttackAbilityId = "player.attack";
-        public const string DashAbilityId = "player.dash";
-        public const string HitAbilityId = "player.hit";
+        public const string AttackAbilityId = PlayerRuntimeSystems.AttackAbilityId;
+        public const string DashAbilityId = PlayerRuntimeSystems.DashAbilityId;
+        public const string HitAbilityId = PlayerRuntimeSystems.HitAbilityId;
 
         [Header("配置")]
         [SerializeField] private string configId = "player";
@@ -80,11 +80,12 @@ namespace Odyssey.Characters.Player
         public Transform MainCameraTransform { get; private set; }
         public int MaxHealth => maxHealth;
         public string ConfigId => configId;
-        public int CurrentHealth => _health?.Current ?? Mathf.Clamp(startingHealth, 0, maxHealth);
-        public IAbilitySystem Abilities { get; private set; }
+        public int CurrentHealth => _runtime?.Health.Current ?? Mathf.Clamp(startingHealth, 0, maxHealth);
+        public IAbilitySystem Abilities => _runtime?.Abilities;
         public event System.Action<HealthChanged> HealthChanged;
 
-        private Health _health;
+        private PlayerRuntimeSystems _runtime;
+        private PlayerConfigData _appliedConfig;
         
         
         
@@ -97,35 +98,7 @@ namespace Odyssey.Characters.Player
             Controller = GetComponent<CharacterController>();
             Animator = GetComponentInChildren<Animator>(); // 动画通常在子物体模型上
 
-            _health = new Health(Mathf.Max(1, maxHealth));
-            _health.Changed += change => HealthChanged?.Invoke(change);
-            var initialDamage = _health.Maximum - Mathf.Clamp(startingHealth, 0, _health.Maximum);
-            if (initialDamage > 0)
-            {
-                _health.Apply(new DamageRequest(initialDamage, "initial"));
-            }
-
-            Abilities = new AbilitySystem(new[]
-            {
-                new AbilityDefinition(
-                    AttackAbilityId,
-                    AttackCooldown,
-                    blockedTags: new[] { GameplayTag.Parse("State.Hit") },
-                    ownedTags: new[] { GameplayTag.Parse("Ability.Attack") }),
-                new AbilityDefinition(
-                    DashAbilityId,
-                    GroundDashCooldown,
-                    blockedTags: new[] { GameplayTag.Parse("State.Hit") },
-                    ownedTags: new[] { GameplayTag.Parse("Ability.Dash") }),
-                new AbilityDefinition(
-                    HitAbilityId,
-                    ownedTags: new[] { GameplayTag.Parse("State.Hit") },
-                    cancelTags: new[]
-                    {
-                        GameplayTag.Parse("Ability.Attack"),
-                        GameplayTag.Parse("Ability.Dash")
-                    })
-            });
+            RebuildRuntimeSystems(CreateInspectorConfig(), startingHealth);
             
             // 初始化状态机
             StateMachine = new StateMachine<PlayerController>();
@@ -178,7 +151,7 @@ namespace Odyssey.Characters.Player
             // 如果处于无敌状态，或者已经死了，就不再受伤
             if (IsInvincible || _isDead) return; 
 
-            var damageResult = _health.Apply(new DamageRequest(damage, "enemy"));
+            var damageResult = _runtime.Health.Apply(new DamageRequest(damage, "enemy"));
             if (!damageResult.Accepted)
             {
                 return;
@@ -226,13 +199,13 @@ namespace Odyssey.Characters.Player
         public void SetHealth(int value, string sourceId = "external")
         {
             var target = Mathf.Clamp(value, 0, MaxHealth);
-            if (target < _health.Current)
+            if (target < _runtime.Health.Current)
             {
-                _health.Apply(new DamageRequest(_health.Current - target, sourceId));
+                _runtime.Health.Apply(new DamageRequest(_runtime.Health.Current - target, sourceId));
             }
-            else if (target > _health.Current)
+            else if (target > _runtime.Health.Current)
             {
-                _health.Restore(target - _health.Current, sourceId);
+                _runtime.Health.Restore(target - _runtime.Health.Current, sourceId);
             }
         }
 
@@ -243,8 +216,56 @@ namespace Odyssey.Characters.Player
                 throw new System.ArgumentNullException(nameof(config));
             }
 
+            if (ReferenceEquals(_appliedConfig, config))
+            {
+                return;
+            }
+
+            var preservedHealth = CurrentHealth;
+            Gravity = config.Gravity;
             WalkSpeed = config.WalkSpeed;
             RunSpeed = config.RunSpeed;
+            DashForce = config.DashForce;
+            DashDuration = config.DashDuration;
+            GroundDashCooldown = config.DashCooldown;
+            JumpHeight = config.JumpHeight;
+            ChargeJumpHeight = config.ChargeJumpHeight;
+            MinChargeTime = config.MinChargeTime;
+            AirJumpHeight = config.AirJumpHeight;
+            WallSlideSpeed = config.WallSlideSpeed;
+            WallJumpUpForce = config.WallJumpUpForce;
+            WallJumpSideForce = config.WallJumpSideForce;
+            AttackDamage = config.AttackDamage;
+            AttackRange = config.AttackRange;
+            AttackCooldown = config.AttackCooldown;
+            maxHealth = config.MaxHealth;
+            RebuildRuntimeSystems(config, preservedHealth);
+            _appliedConfig = config;
+        }
+
+        private PlayerConfigData CreateInspectorConfig()
+        {
+            return new PlayerConfigData(
+                configId, WalkSpeed, RunSpeed, Gravity, DashForce, DashDuration,
+                GroundDashCooldown, JumpHeight, ChargeJumpHeight, MinChargeTime,
+                AirJumpHeight, WallSlideSpeed, WallJumpUpForce, WallJumpSideForce,
+                AttackDamage, AttackRange, AttackCooldown, Mathf.Max(1, maxHealth));
+        }
+
+        private void RebuildRuntimeSystems(PlayerConfigData config, int healthToPreserve)
+        {
+            if (_runtime != null)
+            {
+                _runtime.Health.Changed -= OnHealthChanged;
+            }
+
+            _runtime = new PlayerRuntimeSystems(config, healthToPreserve);
+            _runtime.Health.Changed += OnHealthChanged;
+        }
+
+        private void OnHealthChanged(HealthChanged change)
+        {
+            HealthChanged?.Invoke(change);
         }
         
         // 无敌帧计时器（协程）
@@ -268,7 +289,7 @@ namespace Odyssey.Characters.Player
             yield return new WaitForSeconds(RespawnDelay);
 
             // 3. 恢复满血，取消死亡标记
-            _health.Reset("respawn");
+            _runtime.Health.Reset("respawn");
             _isDead = false;
 
             // 4. 【极度关键】传送 CharacterController 必须先将其禁用！

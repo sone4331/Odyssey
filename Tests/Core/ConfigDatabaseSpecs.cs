@@ -50,7 +50,8 @@ internal static class ConfigDatabaseSpecs
             minChargeTime: 0.4f,
             airJumpHeight: 2.5f,
             wallSlideSpeed: -2.5f,
-            wallJumpForce: 9f,
+            wallJumpUpForce: 12f,
+            wallJumpSideForce: 9f,
             attackDamage: 2,
             attackRange: 2.2f,
             attackCooldown: 0.45f,
@@ -58,6 +59,8 @@ internal static class ConfigDatabaseSpecs
 
         Spec.Equal(-18f, config.Gravity, "重力参数未被保存");
         Spec.Equal(22f, config.DashForce, "冲刺力度参数未被保存");
+        Spec.Equal(12f, config.WallJumpUpForce, "墙跳向上力度参数未被保存");
+        Spec.Equal(9f, config.WallJumpSideForce, "墙跳侧向力度参数未被保存");
         Spec.Equal(2, config.AttackDamage, "攻击伤害参数未被保存");
         Spec.Equal(6, config.MaxHealth, "最大生命参数未被保存");
     }

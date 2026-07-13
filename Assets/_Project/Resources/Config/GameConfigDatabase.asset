@@ -25,7 +25,8 @@ MonoBehaviour:
     minChargeTime: 0.5
     airJumpHeight: 2
     wallSlideSpeed: -3
-    wallJumpForce: 8
+    wallJumpUpForce: 12
+    wallJumpSideForce: 10
     attackDamage: 1
     attackRange: 2
     attackCooldown: 0.5

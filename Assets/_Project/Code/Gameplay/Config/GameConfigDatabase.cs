@@ -39,7 +39,8 @@ namespace Odyssey.Gameplay.Config
             float minChargeTime = 0.5f,
             float airJumpHeight = 2f,
             float wallSlideSpeed = -3f,
-            float wallJumpForce = 8f,
+            float wallJumpUpForce = 12f,
+            float wallJumpSideForce = 10f,
             int attackDamage = 1,
             float attackRange = 2f,
             float attackCooldown = 0.5f,
@@ -57,7 +58,8 @@ namespace Odyssey.Gameplay.Config
             MinChargeTime = minChargeTime;
             AirJumpHeight = airJumpHeight;
             WallSlideSpeed = wallSlideSpeed;
-            WallJumpForce = wallJumpForce;
+            WallJumpUpForce = wallJumpUpForce;
+            WallJumpSideForce = wallJumpSideForce;
             AttackDamage = attackDamage;
             AttackRange = attackRange;
             AttackCooldown = attackCooldown;
@@ -76,7 +78,8 @@ namespace Odyssey.Gameplay.Config
         public float MinChargeTime { get; }
         public float AirJumpHeight { get; }
         public float WallSlideSpeed { get; }
-        public float WallJumpForce { get; }
+        public float WallJumpUpForce { get; }
+        public float WallJumpSideForce { get; }
         public int AttackDamage { get; }
         public float AttackRange { get; }
         public float AttackCooldown { get; }

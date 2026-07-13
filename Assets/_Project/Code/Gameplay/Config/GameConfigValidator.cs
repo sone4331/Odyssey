@@ -51,7 +51,8 @@ namespace Odyssey.Gameplay.Config
             if (config.MinChargeTime < 0f) errors.Add("MinChargeTime 不能小于零。");
             if (config.AirJumpHeight <= 0f) errors.Add("AirJumpHeight 必须大于零。");
             if (config.WallSlideSpeed >= 0f) errors.Add("WallSlideSpeed 必须小于零。");
-            if (config.WallJumpForce <= 0f) errors.Add("WallJumpForce 必须大于零。");
+            if (config.WallJumpUpForce <= 0f) errors.Add("WallJumpUpForce 必须大于零。");
+            if (config.WallJumpSideForce <= 0f) errors.Add("WallJumpSideForce 必须大于零。");
             if (config.AttackDamage <= 0) errors.Add("AttackDamage 必须大于零。");
             if (config.AttackRange <= 0f) errors.Add("AttackRange 必须大于零。");
             if (config.AttackCooldown < 0f) errors.Add("AttackCooldown 不能小于零。");

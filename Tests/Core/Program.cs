@@ -11,6 +11,7 @@ internal static class Program
         AtomicFileSaveServiceSpecs.Register();
         ConfigDatabaseSpecs.Register();
         CsvTableParserSpecs.Register();
+        PlayerRuntimeSystemsSpecs.Register();
         return Spec.Complete();
     }
 }

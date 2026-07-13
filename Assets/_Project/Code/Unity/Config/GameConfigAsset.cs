@@ -84,7 +84,8 @@ namespace Odyssey.Unity.Config
         public float minChargeTime;
         public float airJumpHeight;
         public float wallSlideSpeed;
-        public float wallJumpForce;
+        public float wallJumpUpForce;
+        public float wallJumpSideForce;
         public int attackDamage;
         public float attackRange;
         public float attackCooldown;
@@ -93,7 +94,8 @@ namespace Odyssey.Unity.Config
         public PlayerConfigData ToData() => new PlayerConfigData(
             id, walkSpeed, runSpeed, gravity, dashForce, dashDuration, dashCooldown,
             jumpHeight, chargeJumpHeight, minChargeTime, airJumpHeight,
-            wallSlideSpeed, wallJumpForce, attackDamage, attackRange, attackCooldown, maxHealth);
+            wallSlideSpeed, wallJumpUpForce, wallJumpSideForce,
+            attackDamage, attackRange, attackCooldown, maxHealth);
     }
 
     [Serializable]
