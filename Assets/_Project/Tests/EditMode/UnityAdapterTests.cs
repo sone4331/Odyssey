@@ -9,8 +9,10 @@ using Odyssey.Unity.Save;
 using Odyssey.Unity.UI;
 using Odyssey.Unity.Config;
 using Odyssey.Editor.Config;
+using Odyssey.Inputs;
 using UnityEngine;
 using UnityEngine.UI;
+using UnityEditor;
 
 namespace Odyssey.Tests
 {
@@ -139,21 +141,21 @@ namespace Odyssey.Tests
         public void GameConfigImportTrigger_OnlySchedulesSourceCsvOnceUntilExecuted()
         {
             var trigger = new GameConfigImportTrigger(
-                "Assets/_Project/DesignData/Player.csv",
-                "Assets/_Project/DesignData/Enemy.csv");
+                "Assets/_Project/Data/Design/Player.csv",
+                "Assets/_Project/Data/Design/Enemy.csv");
             System.Action queued = null;
             var importCount = 0;
 
             var ignored = trigger.TrySchedule(
-                new[] { "Assets/_Project/Resources/Config/GameConfigDatabase.asset" },
+                new[] { "Assets/_Project/Data/Runtime/Resources/Config/GameConfigDatabase.asset" },
                 action => queued = action,
                 () => importCount++);
             var first = trigger.TrySchedule(
-                new[] { "Assets/_Project/DesignData/Player.csv" },
+                new[] { "Assets/_Project/Data/Design/Player.csv" },
                 action => queued = action,
                 () => importCount++);
             var duplicate = trigger.TrySchedule(
-                new[] { "Assets/_Project/DesignData/Enemy.csv" },
+                new[] { "Assets/_Project/Data/Design/Enemy.csv" },
                 action => queued = action,
                 () => importCount++);
 
@@ -166,7 +168,7 @@ namespace Odyssey.Tests
 
             Assert.That(importCount, Is.EqualTo(1));
             Assert.That(trigger.TrySchedule(
-                new[] { "Assets/_Project/DesignData/Enemy.csv" },
+                new[] { "Assets/_Project/Data/Design/Enemy.csv" },
                 action => queued = action,
                 () => importCount++), Is.True);
         }
@@ -209,6 +211,23 @@ namespace Odyssey.Tests
                 Object.DestroyImmediate(texture);
                 Object.DestroyImmediate(container);
             }
+        }
+
+        [Test]
+        public void ProjectStructure_UsesMigratedSceneAndPreservesCriticalGuids()
+        {
+            const string scenePath = "Assets/_Project/Content/Scenes/Level_01.unity";
+            const string healthUiPath = "Assets/_Project/Code/Unity/UI/PlayerHealthUI.cs";
+            const string playerPath = "Assets/_Project/Code/Unity/Characters/Player/PlayerController.cs";
+            const string inputReaderPath = "Assets/_Project/Data/UnityAssets/Input/PlayerInputReader.asset";
+
+            Assert.That(AssetDatabase.LoadAssetAtPath<SceneAsset>(scenePath), Is.Not.Null);
+            Assert.That(EditorBuildSettings.scenes.Length, Is.EqualTo(1));
+            Assert.That(EditorBuildSettings.scenes[0].path, Is.EqualTo(scenePath));
+            Assert.That(AssetDatabase.AssetPathToGUID(healthUiPath), Is.EqualTo("752cb09d697c4375af4ea10b03fe7ca5"));
+            Assert.That(AssetDatabase.AssetPathToGUID(playerPath), Is.EqualTo("cd9defc8c3d24d3d971a34755db37fe1"));
+            Assert.That(AssetDatabase.LoadAssetAtPath<InputReader>(inputReaderPath), Is.Not.Null);
+            Assert.That(AssetDatabase.LoadAssetAtPath<Object>("Assets/_Project/Scenes/Level_01.unity"), Is.Null);
         }
 
         [System.Serializable]

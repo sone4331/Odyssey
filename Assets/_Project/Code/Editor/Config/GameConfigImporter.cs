@@ -15,9 +15,9 @@ namespace Odyssey.Editor.Config
     /// </summary>
     public static class GameConfigImporter
     {
-        public const string PlayerCsvPath = "Assets/_Project/DesignData/Player.csv";
-        public const string EnemyCsvPath = "Assets/_Project/DesignData/Enemy.csv";
-        public const string OutputDirectory = "Assets/_Project/Resources/Config";
+        public const string PlayerCsvPath = "Assets/_Project/Data/Design/Player.csv";
+        public const string EnemyCsvPath = "Assets/_Project/Data/Design/Enemy.csv";
+        public const string OutputDirectory = "Assets/_Project/Data/Runtime/Resources/Config";
         public const string OutputAssetPath = OutputDirectory + "/GameConfigDatabase.asset";
 
         /// <summary>
