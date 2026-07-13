@@ -8,6 +8,7 @@ using Odyssey.Gameplay.Config;
 using Odyssey.Unity.Save;
 using Odyssey.Unity.UI;
 using Odyssey.Unity.Config;
+using Odyssey.Editor.Config;
 
 namespace Odyssey.Tests
 {
@@ -130,6 +131,42 @@ namespace Odyssey.Tests
             Assert.That(data.DashForce, Is.EqualTo(22f));
             Assert.That(data.AttackDamage, Is.EqualTo(2));
             Assert.That(data.MaxHealth, Is.EqualTo(6));
+        }
+
+        [Test]
+        public void GameConfigImportTrigger_OnlySchedulesSourceCsvOnceUntilExecuted()
+        {
+            var trigger = new GameConfigImportTrigger(
+                "Assets/_Project/DesignData/Player.csv",
+                "Assets/_Project/DesignData/Enemy.csv");
+            System.Action queued = null;
+            var importCount = 0;
+
+            var ignored = trigger.TrySchedule(
+                new[] { "Assets/_Project/Resources/Config/GameConfigDatabase.asset" },
+                action => queued = action,
+                () => importCount++);
+            var first = trigger.TrySchedule(
+                new[] { "Assets/_Project/DesignData/Player.csv" },
+                action => queued = action,
+                () => importCount++);
+            var duplicate = trigger.TrySchedule(
+                new[] { "Assets/_Project/DesignData/Enemy.csv" },
+                action => queued = action,
+                () => importCount++);
+
+            Assert.That(ignored, Is.False);
+            Assert.That(first, Is.True);
+            Assert.That(duplicate, Is.False);
+            Assert.That(importCount, Is.Zero);
+
+            queued.Invoke();
+
+            Assert.That(importCount, Is.EqualTo(1));
+            Assert.That(trigger.TrySchedule(
+                new[] { "Assets/_Project/DesignData/Enemy.csv" },
+                action => queued = action,
+                () => importCount++), Is.True);
         }
 
         [System.Serializable]

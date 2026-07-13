@@ -4,7 +4,8 @@
   "references": [
     "Odyssey.Core",
     "Odyssey.Gameplay",
-    "Odyssey.Unity"
+    "Odyssey.Unity",
+    "Odyssey.Editor"
   ],
   "includePlatforms": [
     "Editor"

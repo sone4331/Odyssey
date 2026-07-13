@@ -15,10 +15,10 @@ namespace Odyssey.Editor.Config
     /// </summary>
     public static class GameConfigImporter
     {
-        private const string PlayerCsvPath = "Assets/_Project/DesignData/Player.csv";
-        private const string EnemyCsvPath = "Assets/_Project/DesignData/Enemy.csv";
-        private const string OutputDirectory = "Assets/_Project/Resources/Config";
-        private const string OutputAssetPath = OutputDirectory + "/GameConfigDatabase.asset";
+        public const string PlayerCsvPath = "Assets/_Project/DesignData/Player.csv";
+        public const string EnemyCsvPath = "Assets/_Project/DesignData/Enemy.csv";
+        public const string OutputDirectory = "Assets/_Project/Resources/Config";
+        public const string OutputAssetPath = OutputDirectory + "/GameConfigDatabase.asset";
 
         /// <summary>
         /// 按“全部解析、全部校验、最后写资产”的事务顺序导入配置。
