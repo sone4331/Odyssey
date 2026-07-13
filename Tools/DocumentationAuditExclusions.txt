@@ -1,0 +1,16 @@
+# 这些遗留文件将在对应架构重构阶段拆分并移出白名单，避免为即将删除的结构重复补注释。
+Assets/_Project/Scripts/Characters/Enemies/Enemy.cs
+Assets/_Project/Scripts/Characters/Player/PlayerAirState.cs
+Assets/_Project/Scripts/Characters/Player/PlayerAttackState.cs
+Assets/_Project/Scripts/Characters/Player/PlayerController.cs
+Assets/_Project/Scripts/Characters/Player/PlayerDashState.cs
+Assets/_Project/Scripts/Characters/Player/PlayerGroundedState.cs
+Assets/_Project/Scripts/Characters/Player/PlayerHitState.cs
+Assets/_Project/Scripts/Characters/Player/PlayerIdleState.cs
+Assets/_Project/Scripts/Characters/Player/PlayerJumpState.cs
+Assets/_Project/Scripts/Characters/Player/PlayerMoveState.cs
+Assets/_Project/Scripts/Characters/Player/PlayerState.cs
+Assets/_Project/Scripts/Characters/Player/PlayerWallSlideState.cs
+Assets/_Project/Scripts/Core/FSM/BaseState.cs
+Assets/_Project/Scripts/Core/FSM/StateMachine.cs
+Assets/_Project/Scripts/Inputs/InputReader.cs

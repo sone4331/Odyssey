@@ -4,6 +4,10 @@ using Odyssey.Core.Tags;
 
 namespace Odyssey.Core.Abilities
 {
+    /// <summary>
+    /// 描述技能的激活约束、冷却与标签副作用，是 Ability 系统的不可变配置对象。
+    /// 采用数据对象模式把规则声明与运行时状态分离，使玩家、AI 和网络校验能够复用同一份定义。
+    /// </summary>
     public sealed class AbilityDefinition
     {
         public AbilityDefinition(

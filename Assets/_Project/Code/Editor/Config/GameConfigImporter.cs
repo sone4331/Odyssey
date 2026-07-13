@@ -9,6 +9,10 @@ using UnityEngine;
 
 namespace Odyssey.Editor.Config
 {
+    /// <summary>
+    /// 编排 CSV 读取、类型转换、领域校验和 ScriptableObject 生成，是设计数据进入运行时的唯一 Editor 入口。
+    /// 采用 Pipeline 与 Anti-Corruption Layer，阻止文本格式和无效数据渗透到 Gameplay 或构建产物。
+    /// </summary>
     public static class GameConfigImporter
     {
         private const string PlayerCsvPath = "Assets/_Project/DesignData/Player.csv";
@@ -16,6 +20,10 @@ namespace Odyssey.Editor.Config
         private const string OutputDirectory = "Assets/_Project/Resources/Config";
         private const string OutputAssetPath = OutputDirectory + "/GameConfigDatabase.asset";
 
+        /// <summary>
+        /// 按“全部解析、全部校验、最后写资产”的事务顺序导入配置。
+        /// 任一表失败时不会覆盖现有有效资产，确保运行时数据库始终来自完整一致的数据集。
+        /// </summary>
         [MenuItem("Odyssey/Config/Import All CSV")]
         public static void ImportAll()
         {

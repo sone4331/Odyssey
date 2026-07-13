@@ -4,6 +4,10 @@ using System.Text;
 
 namespace Odyssey.Gameplay.Config
 {
+    /// <summary>
+    /// 表示一行以列名索引的 CSV 数据，为导表阶段提供显式的缺列错误。
+    /// 作为只读数据对象隔离文本解析结果与具体 Gameplay 配置类型。
+    /// </summary>
     public sealed class CsvRow
     {
         private readonly IReadOnlyDictionary<string, string> _values;
@@ -16,6 +20,10 @@ namespace Odyssey.Gameplay.Config
         public string this[string column] => _values[column];
     }
 
+    /// <summary>
+    /// 保存 CSV 表头和数据行，是解析器与类型化导入器之间的中间表示。
+    /// 中间表示让通用语法解析与业务字段校验保持独立，避免解析器了解玩家或敌人规则。
+    /// </summary>
     public sealed class CsvTable
     {
         internal CsvTable(IReadOnlyList<CsvRow> rows)
@@ -26,6 +34,10 @@ namespace Odyssey.Gameplay.Config
         public IReadOnlyList<CsvRow> Rows { get; }
     }
 
+    /// <summary>
+    /// 将 RFC4180 风格文本解析为通用表结构，并处理引号、逗号和换行。
+    /// 使用无状态 Parser 模式确保导表、构建验证和测试共享完全一致的语法行为。
+    /// </summary>
     public static class CsvTableParser
     {
         public static CsvTable Parse(string text)

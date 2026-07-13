@@ -3,6 +3,9 @@ using System.Collections.Generic;
 
 namespace Odyssey.Gameplay.Config
 {
+    /// <summary>
+    /// 表示一次配置校验产生的不可变错误集合，供导表与构建门禁统一消费。
+    /// </summary>
     public readonly struct ConfigValidationResult
     {
         public ConfigValidationResult(IReadOnlyList<string> errors)
@@ -14,6 +17,10 @@ namespace Odyssey.Gameplay.Config
         public bool IsValid => Errors == null || Errors.Count == 0;
     }
 
+    /// <summary>
+    /// 集中维护 Gameplay 配置的领域范围约束，不负责读取文件或创建 Unity 资产。
+    /// 使用 Specification 风格的无状态验证，使 Editor 导入、命令行构建和测试共享同一规则来源。
+    /// </summary>
     public static class GameConfigValidator
     {
         public static ConfigValidationResult Validate(PlayerConfigData config)

@@ -2,6 +2,10 @@ using System;
 
 namespace Odyssey.Gameplay.Combat
 {
+    /// <summary>
+    /// 维护生命值不变量并统一处理伤害、恢复和重置，是与 Unity 无关的战斗聚合根。
+    /// 通过领域事件发布结果，使 UI、VFX、存档和网络复制只依赖已提交状态而不直接修改内部数据。
+    /// </summary>
     public sealed class Health : IHealth, IDamageable
     {
         public Health(int maximum)

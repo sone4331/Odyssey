@@ -5,6 +5,10 @@ using UnityEngine;
 
 namespace Odyssey.Editor.Testing
 {
+    /// <summary>
+    /// 为菜单和 Unity batchmode 提供统一的 EditMode 测试入口，并把结果写入可由外部脚本读取的文件。
+    /// 采用 Adapter 模式封装 TestRunnerApi 生命周期，避免构建脚本依赖 Unity 测试回调细节。
+    /// </summary>
     [InitializeOnLoad]
     public static class OdysseyTestRunner
     {

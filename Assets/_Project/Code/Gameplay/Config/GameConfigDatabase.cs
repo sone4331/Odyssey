@@ -3,17 +3,27 @@ using System.Collections.Generic;
 
 namespace Odyssey.Gameplay.Config
 {
+    /// <summary>
+    /// 标识具有稳定 ID 的配置记录，是类型化配置数据库的最小数据契约。
+    /// </summary>
     public interface IConfigRecord
     {
         string Id { get; }
     }
 
+    /// <summary>
+    /// 定义按类型和 ID 查询只读配置的端口，隔离 Gameplay 与 CSV、ScriptableObject 等存储形式。
+    /// 采用 Repository 模式与依赖倒置，使测试可使用内存数据库，Unity 运行时可使用资产适配器。
+    /// </summary>
     public interface IGameConfigProvider
     {
         T Get<T>(string id) where T : class, IConfigRecord;
         bool TryGet<T>(string id, out T record) where T : class, IConfigRecord;
     }
 
+    /// <summary>
+    /// 保存玩家运行时所需的纯 C# 配置数据，避免 Gameplay 直接依赖 Unity 序列化对象。
+    /// </summary>
     public sealed class PlayerConfigData : IConfigRecord
     {
         public PlayerConfigData(string id, float walkSpeed, float runSpeed)
@@ -28,6 +38,9 @@ namespace Odyssey.Gameplay.Config
         public float RunSpeed { get; }
     }
 
+    /// <summary>
+    /// 保存敌人运行时所需的纯 C# 配置数据，为后续 AI 与 Unity Adapter 提供稳定输入。
+    /// </summary>
     public sealed class EnemyConfigData : IConfigRecord
     {
         public EnemyConfigData(string id, float chaseRange, float attackRange)
@@ -42,6 +55,10 @@ namespace Odyssey.Gameplay.Config
         public float AttackRange { get; }
     }
 
+    /// <summary>
+    /// 将不同类型的配置记录构建为只读类型化索引，并拒绝重复 ID。
+    /// 使用内存 Repository 模式保证查询不依赖 Unity，同时把配置唯一性不变量集中在一个边界维护。
+    /// </summary>
     public sealed class GameConfigDatabase : IGameConfigProvider
     {
         private readonly Dictionary<Type, Dictionary<string, IConfigRecord>> _records =

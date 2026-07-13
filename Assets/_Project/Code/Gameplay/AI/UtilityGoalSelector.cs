@@ -3,6 +3,10 @@ using System.Collections.Generic;
 
 namespace Odyssey.Gameplay.AI
 {
+    /// <summary>
+    /// 声明一个可用性条件和若干评分考量组成的 AI 目标。
+    /// 使用 Strategy 组合评分函数，使新目标和新考量可以独立扩展，而不修改选择器流程。
+    /// </summary>
     public sealed class UtilityGoal<TGoal, TContext>
     {
         public UtilityGoal(
@@ -20,6 +24,9 @@ namespace Odyssey.Gameplay.AI
         public IReadOnlyList<Func<TContext, float>> Considerations { get; }
     }
 
+    /// <summary>
+    /// 封装 Utility 选择结果及最终分数，供行为层执行并供调试界面解释决策依据。
+    /// </summary>
     public readonly struct UtilitySelection<TGoal>
     {
         public UtilitySelection(TGoal goal, float score)
@@ -32,6 +39,10 @@ namespace Odyssey.Gameplay.AI
         public float Score { get; }
     }
 
+    /// <summary>
+    /// 根据只读上下文选择当前最高分的可用目标，是 AI 决策层的纯 C# 领域服务。
+    /// 采用 Utility AI 与 Strategy 模式分离“如何评分”和“如何执行”，使决策可测试且不依赖 Unity 场景。
+    /// </summary>
     public sealed class UtilityGoalSelector<TGoal, TContext>
     {
         private readonly IReadOnlyList<UtilityGoal<TGoal, TContext>> _goals;

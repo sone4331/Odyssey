@@ -5,6 +5,10 @@ using Odyssey.Unity.UI;
 
 namespace Odyssey.Characters.Player
 {
+    /// <summary>
+    /// 实现血量视图端口并管理 PlayerController 事件订阅，只负责 UGUI 图标和受伤闪屏表现。
+    /// 采用 Passive View/MVP 与观察者模式，避免 UI 每帧轮询或直接修改 Gameplay 生命状态。
+    /// </summary>
     public class PlayerHealthUI : MonoBehaviour, IHealthDisplayView
     {
         [Header("References")]

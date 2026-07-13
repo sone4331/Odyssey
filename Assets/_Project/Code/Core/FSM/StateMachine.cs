@@ -3,6 +3,10 @@ using System.Collections.Generic;
 
 namespace Odyssey.Core.FSM
 {
+    /// <summary>
+    /// 管理状态生命周期，并在 Tick 完成后集中提交转移请求。
+    /// 采用延迟提交的 State 模式，确保当前状态退出后不会继续污染新状态的同帧逻辑，同时保持纯 C# 可测试性。
+    /// </summary>
     public sealed class DeferredStateMachine<TStateId>
     {
         private readonly IReadOnlyDictionary<TStateId, IState<TStateId>> _states;
@@ -22,6 +26,10 @@ namespace Odyssey.Core.FSM
             _currentState.Enter();
         }
 
+        /// <summary>
+        /// 先执行当前状态并保存转移意图，再由状态机统一完成 Exit、替换和 Enter。
+        /// 转移阶段集中化是状态一致性的关键约束，状态实现不得绕过该顺序直接切换实例。
+        /// </summary>
         public void Tick(float deltaTime)
         {
             EnsureInitialized();

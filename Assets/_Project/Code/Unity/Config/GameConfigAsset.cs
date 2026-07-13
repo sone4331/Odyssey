@@ -5,6 +5,10 @@ using UnityEngine;
 
 namespace Odyssey.Unity.Config
 {
+    /// <summary>
+    /// 将 Unity 可序列化配置条目适配为纯 C# 的 IGameConfigProvider。
+    /// 采用 Adapter 与 Repository 模式，让 Inspector/导表资产停留在 Unity 边界，Gameplay 只读取不可变数据。
+    /// </summary>
     [CreateAssetMenu(fileName = "GameConfigDatabase", menuName = "Odyssey/Config/Game Config Database")]
     public sealed class GameConfigAsset : ScriptableObject, IGameConfigProvider
     {
@@ -63,6 +67,9 @@ namespace Odyssey.Unity.Config
     }
 
     [Serializable]
+    /// <summary>
+    /// 玩家配置的 Unity 序列化 DTO，仅负责资产存储并转换为纯 C# PlayerConfigData。
+    /// </summary>
     public sealed class PlayerConfigEntry
     {
         public string id;
@@ -73,6 +80,9 @@ namespace Odyssey.Unity.Config
     }
 
     [Serializable]
+    /// <summary>
+    /// 敌人配置的 Unity 序列化 DTO，仅负责资产存储并转换为纯 C# EnemyConfigData。
+    /// </summary>
     public sealed class EnemyConfigEntry
     {
         public string id;

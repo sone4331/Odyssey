@@ -7,6 +7,10 @@ using UnityEngine.Serialization;
 
 namespace Odyssey.Systems
 {
+    /// <summary>
+    /// 定义当前玩家存档的版本化 DTO，只保存可序列化数据，不包含场景对象或业务行为。
+    /// 通过显式版本字段支持后续迁移，避免将 Unity 组件结构直接固化到磁盘格式。
+    /// </summary>
     [Serializable]
     public sealed class PlayerSaveData : IVersionedSave
     {
@@ -25,6 +29,10 @@ namespace Odyssey.Systems
         }
     }
 
+    /// <summary>
+    /// 作为 Unity 场景适配器收集与恢复玩家快照，并把持久化委托给 ISaveService。
+    /// 采用 Facade 与 Adapter 模式兼容现有按钮绑定，同时将 JSON、原子写入和版本规则移出 MonoBehaviour。
+    /// </summary>
     public sealed class SaveManager : MonoBehaviour
     {
         [Header("UI")]

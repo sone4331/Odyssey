@@ -2,6 +2,10 @@ using System;
 
 namespace Odyssey.Core.Tags
 {
+    /// <summary>
+    /// 表示可分层匹配的玩法语义标签，例如 State.Combat.Attacking。
+    /// 采用值对象模式统一跨系统条件语言，避免 Ability、AI 和网络校验依赖具体状态类型。
+    /// </summary>
     public readonly struct GameplayTag : IEquatable<GameplayTag>
     {
         private GameplayTag(string value)
