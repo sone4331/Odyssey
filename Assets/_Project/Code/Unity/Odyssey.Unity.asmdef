@@ -3,7 +3,8 @@
   "rootNamespace": "Odyssey.Unity",
   "references": [
     "Odyssey.Core",
-    "Odyssey.Gameplay"
+    "Odyssey.Gameplay",
+    "Unity.ugui"
   ],
   "includePlatforms": [],
   "excludePlatforms": [],

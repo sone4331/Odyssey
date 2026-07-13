@@ -26,6 +26,8 @@ namespace Odyssey.Characters.Player
 
         private PlayerController _boundPlayer;
         private HealthDisplayPresenter _presenter;
+        private HealthIconPool _iconPool;
+        private bool _reportedMissingTemplate;
 
         private void OnEnable()
         {
@@ -52,19 +54,16 @@ namespace Odyssey.Characters.Player
 
         public void SetHealth(int current, int maximum)
         {
-            if (HealthIcons == null)
+            if (_iconPool == null)
             {
-                return;
+                _iconPool = new HealthIconPool(HealthIcons);
             }
 
-            for (var i = 0; i < HealthIcons.Length; i++)
+            if (!_iconPool.SetHealth(current, maximum, FullHealthSprite, EmptyHealthSprite) &&
+                !_reportedMissingTemplate)
             {
-                if (HealthIcons[i] != null)
-                {
-                    HealthIcons[i].sprite = i < current && i < maximum
-                        ? FullHealthSprite
-                        : EmptyHealthSprite;
-                }
+                _reportedMissingTemplate = true;
+                Debug.LogError("血量 UI 缺少可用于扩容的生命图标模板。", this);
             }
         }
 

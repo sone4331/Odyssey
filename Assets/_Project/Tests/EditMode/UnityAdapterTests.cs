@@ -9,6 +9,8 @@ using Odyssey.Unity.Save;
 using Odyssey.Unity.UI;
 using Odyssey.Unity.Config;
 using Odyssey.Editor.Config;
+using UnityEngine;
+using UnityEngine.UI;
 
 namespace Odyssey.Tests
 {
@@ -167,6 +169,46 @@ namespace Odyssey.Tests
                 new[] { "Assets/_Project/DesignData/Enemy.csv" },
                 action => queued = action,
                 () => importCount++), Is.True);
+        }
+
+        [Test]
+        public void HealthIconPool_GrowsHidesAndReusesIcons()
+        {
+            var container = new GameObject("生命图标容器", typeof(RectTransform));
+            var seeds = new Image[5];
+            var texture = new Texture2D(1, 1);
+            var full = Sprite.Create(texture, new Rect(0, 0, 1, 1), Vector2.zero);
+            try
+            {
+                for (var index = 0; index < seeds.Length; index++)
+                {
+                    var icon = new GameObject($"生命图标 {index + 1}", typeof(RectTransform), typeof(Image));
+                    icon.transform.SetParent(container.transform, false);
+                    seeds[index] = icon.GetComponent<Image>();
+                }
+
+                var pool = new HealthIconPool(seeds);
+
+                Assert.That(pool.SetHealth(6, 6, full, null), Is.True);
+                Assert.That(pool.Count, Is.EqualTo(6));
+                Assert.That(pool.ActiveCount, Is.EqualTo(6));
+
+                pool.SetHealth(6, 6, full, null);
+                Assert.That(pool.Count, Is.EqualTo(6));
+
+                pool.SetHealth(3, 4, full, null);
+                Assert.That(pool.Count, Is.EqualTo(6));
+                Assert.That(pool.ActiveCount, Is.EqualTo(4));
+                Assert.That(pool[0].sprite, Is.SameAs(full));
+                Assert.That(pool[2].sprite, Is.SameAs(full));
+                Assert.That(pool[3].sprite, Is.Null);
+            }
+            finally
+            {
+                Object.DestroyImmediate(full);
+                Object.DestroyImmediate(texture);
+                Object.DestroyImmediate(container);
+            }
         }
 
         [System.Serializable]

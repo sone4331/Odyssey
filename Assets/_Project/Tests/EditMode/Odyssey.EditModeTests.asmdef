@@ -5,7 +5,8 @@
     "Odyssey.Core",
     "Odyssey.Gameplay",
     "Odyssey.Unity",
-    "Odyssey.Editor"
+    "Odyssey.Editor",
+    "Unity.ugui"
   ],
   "includePlatforms": [
     "Editor"
