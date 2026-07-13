@@ -23,7 +23,7 @@ namespace Odyssey.Unity.Config
             IPlayerConfigTarget target)
         {
             if (provider == null) throw new ArgumentNullException(nameof(provider));
-            if (string.IsNullOrWhiteSpace(configId)) throw new ArgumentException("Config id is required.", nameof(configId));
+            if (string.IsNullOrWhiteSpace(configId)) throw new ArgumentException("必须提供配置 ID。", nameof(configId));
             if (target == null) throw new ArgumentNullException(nameof(target));
 
             target.Apply(provider.Get<PlayerConfigData>(configId));

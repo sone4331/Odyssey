@@ -44,7 +44,7 @@ namespace Odyssey.Gameplay.Config
         {
             if (string.IsNullOrWhiteSpace(text))
             {
-                throw new FormatException("CSV text cannot be empty.");
+                throw new FormatException("CSV 文本不能为空。");
             }
 
             var lines = text.Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries);
@@ -54,7 +54,7 @@ namespace Odyssey.Gameplay.Config
             {
                 if (string.IsNullOrWhiteSpace(header) || !uniqueHeaders.Add(header))
                 {
-                    throw new FormatException($"CSV header '{header}' is empty or duplicated.");
+                    throw new FormatException($"CSV 表头“{header}”为空或重复。");
                 }
             }
 
@@ -64,7 +64,7 @@ namespace Odyssey.Gameplay.Config
                 var fields = ParseLine(lines[lineIndex]);
                 if (fields.Count != headers.Count)
                 {
-                    throw new FormatException($"CSV row {lineIndex + 1} has {fields.Count} fields; expected {headers.Count}.");
+                    throw new FormatException($"CSV 第 {lineIndex + 1} 行包含 {fields.Count} 个字段，预期为 {headers.Count} 个。");
                 }
 
                 var values = new Dictionary<string, string>(StringComparer.Ordinal);
@@ -113,7 +113,7 @@ namespace Odyssey.Gameplay.Config
 
             if (inQuotes)
             {
-                throw new FormatException("CSV row contains an unterminated quoted field.");
+                throw new FormatException("CSV 行包含未闭合的引号字段。");
             }
 
             fields.Add(field.ToString().Trim());

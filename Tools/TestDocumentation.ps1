@@ -71,7 +71,7 @@ foreach ($root in $SourceRoot)
 
             if ($cursor -lt 0 -or $lines[$cursor].Trim() -ne '/// </summary>')
             {
-                $violations.Add("${relativePath}:$($index + 1) $($match.Groups[2].Value) '$($match.Groups[3].Value)' is missing XML architecture documentation.")
+                $violations.Add("${relativePath}:$($index + 1) $($match.Groups[2].Value)【$($match.Groups[3].Value)】缺少 XML 架构说明。")
             }
         }
     }
@@ -81,7 +81,7 @@ if ($violations.Count -gt 0)
 {
     if (-not $Quiet)
     {
-        $violations | ForEach-Object { Write-Output "ERROR: $_" }
+        $violations | ForEach-Object { Write-Output "错误：$_" }
     }
 
     exit 1
@@ -89,7 +89,7 @@ if ($violations.Count -gt 0)
 
 if (-not $Quiet)
 {
-    Write-Output "PASS: production type documentation audit"
+    Write-Output "通过：生产类型架构注释审计"
 }
 
 exit 0

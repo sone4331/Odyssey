@@ -6,8 +6,8 @@ internal static class AtomicFileSaveServiceSpecs
 {
     public static void Register()
     {
-        Spec.Run("atomic_save_replaces_existing_file", AtomicSaveReplacesExistingFile);
-        Spec.Run("load_returns_false_for_invalid_payload", LoadReturnsFalseForInvalidPayload);
+        Spec.Run("原子存档替换现有文件", AtomicSaveReplacesExistingFile);
+        Spec.Run("无效载荷读取返回失败", LoadReturnsFalseForInvalidPayload);
     }
 
     private static void AtomicSaveReplacesExistingFile()
@@ -21,8 +21,8 @@ internal static class AtomicFileSaveServiceSpecs
 
             service.Save(new TestData { Value = 42 });
 
-            Spec.Equal("42", File.ReadAllText(path), "save file did not contain the new payload");
-            Spec.True(!File.Exists(path + ".tmp"), "temporary save file was left behind");
+            Spec.Equal("42", File.ReadAllText(path), "存档文件未包含新载荷");
+            Spec.True(!File.Exists(path + ".tmp"), "临时存档文件未被清理");
         }
         finally
         {
@@ -41,8 +41,8 @@ internal static class AtomicFileSaveServiceSpecs
 
             var loaded = service.TryLoad(out var data);
 
-            Spec.True(!loaded, "invalid payload was reported as loaded");
-            Spec.True(data == null, "invalid payload returned data");
+            Spec.True(!loaded, "无效载荷被错误报告为读取成功");
+            Spec.True(data == null, "无效载荷返回了数据");
         }
         finally
         {

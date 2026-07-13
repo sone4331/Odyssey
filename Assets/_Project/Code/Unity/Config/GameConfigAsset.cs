@@ -9,7 +9,7 @@ namespace Odyssey.Unity.Config
     /// 将 Unity 可序列化配置条目适配为纯 C# 的 IGameConfigProvider。
     /// 采用 Adapter 与 Repository 模式，让 Inspector/导表资产停留在 Unity 边界，Gameplay 只读取不可变数据。
     /// </summary>
-    [CreateAssetMenu(fileName = "GameConfigDatabase", menuName = "Odyssey/Config/Game Config Database")]
+    [CreateAssetMenu(fileName = "GameConfigDatabase", menuName = "Odyssey/配置/游戏配置数据库")]
     public sealed class GameConfigAsset : ScriptableObject, IGameConfigProvider
     {
         [SerializeField] private List<PlayerConfigEntry> players = new List<PlayerConfigEntry>();

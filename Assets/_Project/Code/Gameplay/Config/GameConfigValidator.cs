@@ -34,12 +34,12 @@ namespace Odyssey.Gameplay.Config
 
             if (config.WalkSpeed <= 0f)
             {
-                errors.Add("WalkSpeed must be greater than zero.");
+                errors.Add("WalkSpeed 必须大于零。");
             }
 
             if (config.RunSpeed < config.WalkSpeed)
             {
-                errors.Add("RunSpeed must be greater than or equal to WalkSpeed.");
+                errors.Add("RunSpeed 必须大于或等于 WalkSpeed。");
             }
 
             return new ConfigValidationResult(errors);
@@ -56,12 +56,12 @@ namespace Odyssey.Gameplay.Config
 
             if (config.ChaseRange <= 0f)
             {
-                errors.Add("ChaseRange must be greater than zero.");
+                errors.Add("ChaseRange 必须大于零。");
             }
 
             if (config.AttackRange <= 0f || config.AttackRange > config.ChaseRange)
             {
-                errors.Add("AttackRange must be positive and no greater than ChaseRange.");
+                errors.Add("AttackRange 必须为正数且不能大于 ChaseRange。");
             }
 
             return new ConfigValidationResult(errors);
@@ -71,7 +71,7 @@ namespace Odyssey.Gameplay.Config
         {
             if (string.IsNullOrWhiteSpace(id))
             {
-                errors.Add("Config id cannot be empty.");
+                errors.Add("配置 ID 不能为空。");
             }
         }
     }

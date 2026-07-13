@@ -70,7 +70,7 @@ namespace Odyssey.Gameplay.Config
             {
                 if (record == null || string.IsNullOrWhiteSpace(record.Id))
                 {
-                    throw new ArgumentException("Config records require a non-empty id.", nameof(records));
+                    throw new ArgumentException("配置记录必须包含非空 ID。", nameof(records));
                 }
 
                 var type = record.GetType();
@@ -82,7 +82,7 @@ namespace Odyssey.Gameplay.Config
 
                 if (typedRecords.ContainsKey(record.Id))
                 {
-                    throw new ArgumentException($"Duplicate {type.Name} config id '{record.Id}'.", nameof(records));
+                    throw new ArgumentException($"{type.Name} 配置 ID“{record.Id}”重复。", nameof(records));
                 }
 
                 typedRecords.Add(record.Id, record);
@@ -93,7 +93,7 @@ namespace Odyssey.Gameplay.Config
         {
             if (!TryGet<T>(id, out var record))
             {
-                throw new KeyNotFoundException($"No {typeof(T).Name} config exists for id '{id}'.");
+                throw new KeyNotFoundException($"不存在 ID 为“{id}”的 {typeof(T).Name} 配置。");
             }
 
             return record;

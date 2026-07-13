@@ -5,11 +5,11 @@ internal static class AbilitySystemSpecs
 {
     public static void Register()
     {
-        Spec.Run("ability_requires_all_required_tags", AbilityRequiresAllRequiredTags);
-        Spec.Run("ability_is_rejected_by_blocking_tag", AbilityIsRejectedByBlockingTag);
-        Spec.Run("active_ability_owns_tags_until_end", ActiveAbilityOwnsTagsUntilEnd);
-        Spec.Run("ability_cooldown_blocks_early_reactivation", AbilityCooldownBlocksEarlyReactivation);
-        Spec.Run("ability_can_cancel_conflicting_active_ability", AbilityCanCancelConflictingActiveAbility);
+        Spec.Run("技能要求全部必需标签", AbilityRequiresAllRequiredTags);
+        Spec.Run("阻止标签拒绝技能激活", AbilityIsRejectedByBlockingTag);
+        Spec.Run("激活技能持有标签直到结束", ActiveAbilityOwnsTagsUntilEnd);
+        Spec.Run("技能冷却阻止提前再次激活", AbilityCooldownBlocksEarlyReactivation);
+        Spec.Run("技能可以取消冲突中的激活技能", AbilityCanCancelConflictingActiveAbility);
     }
 
     private static void AbilityRequiresAllRequiredTags()
@@ -20,7 +20,7 @@ internal static class AbilitySystemSpecs
 
         var result = system.TryActivate("attack", 0f);
 
-        Spec.Equal(AbilityActivationFailure.MissingRequiredTag, result.Failure, "missing tag did not reject ability");
+        Spec.Equal(AbilityActivationFailure.MissingRequiredTag, result.Failure, "缺少必需标签时技能未被拒绝");
     }
 
     private static void AbilityIsRejectedByBlockingTag()
@@ -32,7 +32,7 @@ internal static class AbilitySystemSpecs
 
         var result = system.TryActivate("attack", 0f);
 
-        Spec.Equal(AbilityActivationFailure.BlockedByTag, result.Failure, "blocking parent tag was ignored");
+        Spec.Equal(AbilityActivationFailure.BlockedByTag, result.Failure, "阻止用的父级标签被忽略");
     }
 
     private static void ActiveAbilityOwnsTagsUntilEnd()
@@ -43,10 +43,10 @@ internal static class AbilitySystemSpecs
 
         var result = system.TryActivate("attack", 0f);
 
-        Spec.True(result.Succeeded, "ability did not activate");
-        Spec.True(system.Tags.Has(Tag("State.Combat")), "owned tag was not applied");
+        Spec.True(result.Succeeded, "技能未能激活");
+        Spec.True(system.Tags.Has(Tag("State.Combat")), "技能持有标签未被添加");
         system.End("attack");
-        Spec.True(!system.Tags.Has(Tag("State.Combat")), "owned tag was not removed on end");
+        Spec.True(!system.Tags.Has(Tag("State.Combat")), "技能结束后持有标签未被移除");
     }
 
     private static void AbilityCooldownBlocksEarlyReactivation()
@@ -58,8 +58,8 @@ internal static class AbilitySystemSpecs
         var early = system.TryActivate("dash", 5.5f);
         var ready = system.TryActivate("dash", 6f);
 
-        Spec.Equal(AbilityActivationFailure.OnCooldown, early.Failure, "cooldown did not reject early activation");
-        Spec.True(ready.Succeeded, "ability did not reactivate when cooldown expired");
+        Spec.Equal(AbilityActivationFailure.OnCooldown, early.Failure, "冷却期间的提前激活未被拒绝");
+        Spec.True(ready.Succeeded, "冷却结束后技能未能再次激活");
     }
 
     private static void AbilityCanCancelConflictingActiveAbility()
@@ -71,8 +71,8 @@ internal static class AbilitySystemSpecs
 
         system.TryActivate("hit", 0f);
 
-        Spec.True(!system.IsActive("attack"), "conflicting ability remained active");
-        Spec.True(system.IsActive("hit"), "new ability was not active");
+        Spec.True(!system.IsActive("attack"), "冲突技能仍处于激活状态");
+        Spec.True(system.IsActive("hit"), "新技能未进入激活状态");
     }
 
     private static AbilitySystem NewSystem(params AbilityDefinition[] definitions)

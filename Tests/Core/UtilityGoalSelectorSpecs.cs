@@ -12,10 +12,10 @@ internal static class UtilityGoalSelectorSpecs
 
     public static void Register()
     {
-        Spec.Run("utility_selector_picks_highest_score", UtilitySelectorPicksHighestScore);
-        Spec.Run("utility_selector_skips_unavailable_goal", UtilitySelectorSkipsUnavailableGoal);
-        Spec.Run("utility_selector_clamps_consideration_scores", UtilitySelectorClampsConsiderationScores);
-        Spec.Run("utility_selector_keeps_registration_order_on_tie", UtilitySelectorKeepsRegistrationOrderOnTie);
+        Spec.Run("Utility 选择器选择最高分", UtilitySelectorPicksHighestScore);
+        Spec.Run("Utility 选择器跳过不可用目标", UtilitySelectorSkipsUnavailableGoal);
+        Spec.Run("Utility 选择器限制考量分数", UtilitySelectorClampsConsiderationScores);
+        Spec.Run("Utility 同分时保持注册顺序", UtilitySelectorKeepsRegistrationOrderOnTie);
     }
 
     private static void UtilitySelectorPicksHighestScore()
@@ -26,8 +26,8 @@ internal static class UtilityGoalSelectorSpecs
 
         var selection = selector.Select(0.25f);
 
-        Spec.Equal(Goal.Chase, selection.Goal, "highest scoring goal was not selected");
-        Spec.Equal(0.75f, selection.Score, "selected score was incorrect");
+        Spec.Equal(Goal.Chase, selection.Goal, "未选择最高分目标");
+        Spec.Equal(0.75f, selection.Score, "选择结果的分数错误");
     }
 
     private static void UtilitySelectorSkipsUnavailableGoal()
@@ -38,7 +38,7 @@ internal static class UtilityGoalSelectorSpecs
 
         var selection = selector.Select(false);
 
-        Spec.Equal(Goal.Patrol, selection.Goal, "unavailable goal was selected");
+        Spec.Equal(Goal.Patrol, selection.Goal, "不可用目标被错误选择");
     }
 
     private static void UtilitySelectorClampsConsiderationScores()
@@ -48,7 +48,7 @@ internal static class UtilityGoalSelectorSpecs
 
         var selection = selector.Select(0);
 
-        Spec.Equal(0f, selection.Score, "consideration scores were not clamped to zero-to-one");
+        Spec.Equal(0f, selection.Score, "考量分数未限制在零到一之间");
     }
 
     private static void UtilitySelectorKeepsRegistrationOrderOnTie()
@@ -59,6 +59,6 @@ internal static class UtilityGoalSelectorSpecs
 
         var selection = selector.Select(0);
 
-        Spec.Equal(Goal.Patrol, selection.Goal, "tie did not preserve deterministic registration order");
+        Spec.Equal(Goal.Patrol, selection.Goal, "同分时未保持确定性的注册顺序");
     }
 }

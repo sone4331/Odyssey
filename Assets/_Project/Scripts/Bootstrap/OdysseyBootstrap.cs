@@ -35,7 +35,7 @@ namespace Odyssey.Bootstrap
             _configs = Resources.Load<GameConfigAsset>(ConfigResourcePath);
             if (_configs == null)
             {
-                Debug.LogError($"Missing runtime config at Resources/{ConfigResourcePath}.");
+                Debug.LogError($"Resources/{ConfigResourcePath} 缺少运行时配置。");
             }
 
             SceneManager.sceneLoaded += OnSceneLoaded;

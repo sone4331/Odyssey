@@ -1,36 +1,38 @@
 # Odyssey
 
-Odyssey is a Unity gameplay-client portfolio project focused on production-oriented character control, combat, AI, data-driven configuration, testing, profiling, and host-authoritative multiplayer.
+Odyssey 是一个面向 Unity 玩法客户端岗位的作品集项目，重点展示角色控制、动作战斗、可解释 AI、数据驱动、自动化测试、性能分析和 Host 权威联机能力。
 
-## Current state
+## 当前状态
 
-The industrialization baseline is executable rather than aspirational: Core, Gameplay, Unity and Editor assembly boundaries are in place; player combat uses the shared Ability/Health pipeline; configuration is imported from CSV into a validated runtime asset; saves use versioned atomic JSON; and health UI updates from domain events.
+项目的工业化基线已经可以实际运行：Core、Gameplay、Unity 与 Editor 程序集边界已经建立；玩家战斗使用共享的 Ability/Health 管线；配置从 CSV 导入并生成经过校验的运行时资产；存档使用带版本号的原子 JSON；血量 UI 通过领域事件更新。
 
-The next milestones are player responsibility cleanup, layered Utility AI, performance evidence, and an isolated host-authoritative NetworkArena. Lua, full GAS, deterministic lockstep, KCP integration and a general-purpose build framework are intentionally outside the first portfolio release.
+后续里程碑依次为玩家职责收敛、分层 Utility AI、性能证据和独立的 Host 权威 NetworkArena。首个作品集版本明确不实现 Lua、完整 GAS、确定性帧同步、KCP 接入和通用构建框架。
 
-## Local quality gates
+## 本地质量门禁
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File .\Tools\RunCoreTests.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File .\Tools\TestDocumentation.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File .\Tools\TestHumanReadableLanguage.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File .\Tools\Tests\RunDocumentationAuditSpecs.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File .\Tools\Tests\RunHumanReadableLanguageSpecs.ps1
 ```
 
-Production C# types explain responsibility, pattern and design rationale in Chinese XML summaries. Known legacy controllers are listed in `Tools/DocumentationAuditExclusions.txt` and must be removed from that list when their owning milestone refactors them.
+项目自有生产类型使用中文 XML 摘要说明职责、设计模式和设计原因。已确认的遗留控制器记录在 `Tools/DocumentationAuditExclusions.txt`，对应里程碑重构完成时必须同步移出白名单。
 
-## Environment
+## 开发环境
 
-- Unity `2023.2.20f1c1`
-- Input System `1.7.0`
-- Cinemachine `2.10.0`
-- Windows is the primary development and demonstration platform.
+- Unity 版本：`2023.2.20f1c1`
+- 输入系统：Input System `1.7.0`
+- 摄像机：Cinemachine `2.10.0`
+- 主要开发与演示平台：Windows
 
-## Third-party content
+## 第三方内容
 
-The current prototype scene references Unity 3D Game Kit Lite content. That package and TextMesh Pro example assets are intentionally excluded from the public source repository. Import the matching original package distribution before opening `Assets/_Project/Scenes/Level_01.unity`.
+当前原型场景引用 Unity 3D Game Kit Lite。该资源包和 TextMesh Pro 示例资产不会随公开源码重新分发。打开 `Assets/_Project/Scenes/Level_01.unity` 前，需要从合法来源导入对应的原始资源包。
 
-## Repository policy
+## 仓库公开策略
 
-The local `架构学习文档` directory contains study notes derived from an external commercial project. It is intentionally excluded from the portfolio repository and is not presented as Odyssey implementation work.
+本地“架构学习文档”目录包含对外部商业项目的学习笔记，因此不会进入公开作品集，也不会被描述为 Odyssey 的本人实现。
 
-The repository uses `type(scope): 中文说明` Conventional Commits. A completed module is pushed only after the relevant pure C#, Unity and documentation checks pass.
+仓库使用 `type(scope): 中文说明` 格式的 Conventional Commits。只有相关纯 C#、Unity、中文文案和文档审计全部通过后，完整模块才会推送到远端。

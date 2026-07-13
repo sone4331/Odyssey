@@ -24,7 +24,7 @@ namespace Odyssey.Core.Tags
         {
             if (string.IsNullOrWhiteSpace(value))
             {
-                throw new ArgumentException("A gameplay tag cannot be empty.", nameof(value));
+                throw new ArgumentException("玩法标签不能为空。", nameof(value));
             }
 
             return new GameplayTag(value.Trim());

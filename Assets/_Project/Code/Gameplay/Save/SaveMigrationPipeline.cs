@@ -51,7 +51,7 @@ namespace Odyssey.Gameplay.Save
             {
                 if (_migrations.ContainsKey(migration.FromVersion))
                 {
-                    throw new ArgumentException($"Multiple migrations start at version {migration.FromVersion}.", nameof(migrations));
+                    throw new ArgumentException($"存在多个从版本 {migration.FromVersion} 开始的迁移。", nameof(migrations));
                 }
 
                 _migrations.Add(migration.FromVersion, migration);
@@ -67,7 +67,7 @@ namespace Odyssey.Gameplay.Save
 
             if (save.Version > _currentVersion)
             {
-                throw new InvalidOperationException($"Save version {save.Version} is newer than supported version {_currentVersion}.");
+                throw new InvalidOperationException($"存档版本 {save.Version} 高于当前支持版本 {_currentVersion}。");
             }
 
             while (save.Version < _currentVersion)
@@ -75,13 +75,13 @@ namespace Odyssey.Gameplay.Save
                 var fromVersion = save.Version;
                 if (!_migrations.TryGetValue(fromVersion, out var migration))
                 {
-                    throw new InvalidOperationException($"No save migration exists from version {fromVersion}.");
+                    throw new InvalidOperationException($"缺少从版本 {fromVersion} 开始的存档迁移。");
                 }
 
                 migration.Apply(save);
                 if (save.Version != fromVersion + 1)
                 {
-                    throw new InvalidOperationException($"Migration from version {fromVersion} must advance exactly one version.");
+                    throw new InvalidOperationException($"从版本 {fromVersion} 开始的迁移必须且只能前进一个版本。");
                 }
             }
         }

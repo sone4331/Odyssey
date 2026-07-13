@@ -1,4 +1,4 @@
-param(
+﻿param(
     [string]$Configuration = "Debug"
 )
 
@@ -21,7 +21,7 @@ $sources = @(
 
 if ($sources.Count -eq 0)
 {
-    throw "No core test sources were found."
+    throw "未找到核心测试源文件。"
 }
 
 & $mono $compiler -nologo -langversion:latest -target:exe -out:$outputAssembly $sources

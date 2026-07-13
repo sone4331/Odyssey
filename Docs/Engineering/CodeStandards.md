@@ -23,6 +23,12 @@
 
 Windows PowerShell 5.1 需要包含中文的 `.ps1` 使用 UTF-8 BOM；C#、Markdown、JSON、CSV 和 Unity 文本资产继续使用 UTF-8 与 LF。
 
+## 人类可读文本
+
+README、工程文档、XML 注释、Unity 菜单、Inspector 标题与提示、日志、异常消息、测试报告和命令行输出统一使用中文。代码标识符、第三方 API、动画状态、配置 ID、文件路径和协议字段继续使用英文，避免为了翻译破坏序列化与跨系统契约。
+
+`Tools/TestHumanReadableLanguage.ps1` 审计明确的人类可读上下文。新增英文提示必须改为中文；测试中用于确认“英文会被门禁拒绝”的夹具属于唯一例外。
+
 ## 提交与发布
 
 提交信息采用 `type(scope): 中文说明`：

@@ -12,8 +12,8 @@ internal static class StateMachineSpecs
 
     public static void Register()
     {
-        Spec.Run("transition_is_committed_after_tick_returns", TransitionIsCommittedAfterTickReturns);
-        Spec.Run("self_transition_does_not_reenter_state", SelfTransitionDoesNotReenterState);
+        Spec.Run("Tick 返回后提交状态转移", TransitionIsCommittedAfterTickReturns);
+        Spec.Run("自转移不会重新进入状态", SelfTransitionDoesNotReenterState);
     }
 
     private static void SelfTransitionDoesNotReenterState()
@@ -27,8 +27,8 @@ internal static class StateMachineSpecs
 
         machine.Tick(0.016f);
 
-        Spec.Equal(1, idle.EnterCount, "self transition re-entered state");
-        Spec.Equal(0, idle.ExitCount, "self transition exited state");
+        Spec.Equal(1, idle.EnterCount, "自转移重复进入状态");
+        Spec.Equal(0, idle.ExitCount, "自转移错误退出状态");
     }
 
     private static void TransitionIsCommittedAfterTickReturns()
@@ -41,14 +41,14 @@ internal static class StateMachineSpecs
             [StateId.Moving] = moving
         });
 
-        idle.DuringTick = () => Spec.Equal(StateId.Idle, machine.CurrentId, "current state changed during Tick");
+        idle.DuringTick = () => Spec.Equal(StateId.Idle, machine.CurrentId, "Tick 期间当前状态被提前修改");
 
         machine.Initialize(StateId.Idle);
         machine.Tick(0.016f);
 
-        Spec.Equal(StateId.Moving, machine.CurrentId, "transition was not committed after Tick");
-        Spec.Equal(1, idle.ExitCount, "old state did not exit exactly once");
-        Spec.Equal(1, moving.EnterCount, "new state did not enter exactly once");
+        Spec.Equal(StateId.Moving, machine.CurrentId, "Tick 后转移未被提交");
+        Spec.Equal(1, idle.ExitCount, "旧状态未恰好退出一次");
+        Spec.Equal(1, moving.EnterCount, "新状态未恰好进入一次");
     }
 
     private sealed class RecordingState : IState<StateId>

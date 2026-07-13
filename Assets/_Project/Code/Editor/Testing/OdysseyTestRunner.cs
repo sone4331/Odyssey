@@ -29,7 +29,7 @@ namespace Odyssey.Editor.Testing
             EditorApplication.delayCall += RunEditModeTests;
         }
 
-        [MenuItem("Odyssey/Tests/Run EditMode Tests")]
+        [MenuItem("Odyssey/测试/运行 EditMode 测试")]
         public static void RunEditModeTests()
         {
             File.Delete(ResultPath);
@@ -61,11 +61,11 @@ namespace Odyssey.Editor.Testing
                 File.WriteAllText(ResultPath, summary);
                 if (result.FailCount == 0)
                 {
-                    Debug.Log("Odyssey EditMode tests: " + summary);
+                    Debug.Log("Odyssey EditMode 测试：" + summary);
                 }
                 else
                 {
-                    Debug.LogError("Odyssey EditMode tests: " + summary + "\n" + result.Message);
+                    Debug.LogError("Odyssey EditMode 测试：" + summary + "\n" + result.Message);
                 }
             }
 

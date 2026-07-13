@@ -1,4 +1,4 @@
-param()
+﻿param()
 
 $ErrorActionPreference = "Stop"
 
@@ -25,7 +25,7 @@ function Invoke-AuditFixture
 
 $documented = @"
 /// <summary>
-/// Verifies the fixture boundary for the documentation audit.
+/// 验证架构注释审计的测试边界。
 /// </summary>
 public sealed class DocumentedType { }
 "@
@@ -36,7 +36,7 @@ public sealed class UndocumentedType { }
 
 if ((Invoke-AuditFixture -Source $documented) -ne 0)
 {
-    throw "Documented production type was rejected."
+    throw "已编写架构说明的生产类型被错误拒绝。"
 }
 
 $chineseText = [string]([char]0x804C) + [char]0x8D23
@@ -46,7 +46,7 @@ $utf8Fixture = Join-Path $fixtureRoot "Utf8Fixture.cs"
 & powershell -NoProfile -ExecutionPolicy Bypass -File $auditScript -SourceRoot $fixtureRoot -Quiet
 if ($LASTEXITCODE -ne 0)
 {
-    throw "UTF-8 documentation without BOM was rejected."
+    throw "无 BOM 的 UTF-8 架构说明被错误拒绝。"
 }
 Remove-Item -LiteralPath $utf8Fixture -Force
 
@@ -55,13 +55,13 @@ $utf8Undocumented = "// $chineseText`npublic sealed class Utf8UndocumentedType {
 & powershell -NoProfile -ExecutionPolicy Bypass -File $auditScript -SourceRoot $fixtureRoot -Quiet
 if ($LASTEXITCODE -eq 0)
 {
-    throw "UTF-8 undocumented type without BOM was not detected."
+    throw "未检测到无 BOM UTF-8 文件中缺少架构说明的类型。"
 }
 Remove-Item -LiteralPath $utf8Fixture -Force
 
 if ((Invoke-AuditFixture -Source $undocumented) -eq 0)
 {
-    throw "Undocumented production type was accepted."
+    throw "缺少架构说明的生产类型被错误接受。"
 }
 
 $multipleUndocumented = @"
@@ -78,7 +78,7 @@ if ($LASTEXITCODE -eq 0 -or
     -not ($auditOutput -match 'FirstUndocumentedType') -or
     -not ($auditOutput -match 'SecondUndocumentedType'))
 {
-    throw "Audit did not report every undocumented production type."
+    throw "审计未报告全部缺少架构说明的生产类型。"
 }
 
 $exclusionFile = Join-Path $fixtureRoot "Exclusions.txt"
@@ -87,7 +87,7 @@ Set-Content -LiteralPath $exclusionFile -Value "Temp/DocumentationAuditSpecs/Fix
 & powershell -NoProfile -ExecutionPolicy Bypass -File $auditScript -SourceRoot $fixtureRoot -ExclusionFile $exclusionFile -Quiet
 if ($LASTEXITCODE -ne 0)
 {
-    throw "Explicitly excluded legacy file was rejected."
+    throw "明确列入白名单的遗留文件被错误拒绝。"
 }
 
-Write-Output "PASS: documentation audit specifications"
+Write-Output "通过：架构注释审计规格"

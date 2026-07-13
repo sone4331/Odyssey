@@ -23,7 +23,7 @@ internal static class Spec
     {
         if (!EqualityComparer<T>.Default.Equals(expected, actual))
         {
-            throw new InvalidOperationException($"{message}. Expected {expected}, got {actual}.");
+            throw new InvalidOperationException($"{message}。预期为 {expected}，实际为 {actual}。");
         }
     }
 
@@ -53,7 +53,7 @@ internal static class Spec
     {
         if (Failures.Count == 0)
         {
-            Console.WriteLine($"PASS: {_count} core specifications");
+            Console.WriteLine($"通过：{_count} 个核心规格");
             return 0;
         }
 

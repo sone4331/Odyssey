@@ -35,11 +35,11 @@ namespace Odyssey.Systems
     /// </summary>
     public sealed class SaveManager : MonoBehaviour
     {
-        [Header("UI")]
+        [Header("界面")]
         [FormerlySerializedAs("PauseMenuPanel")]
         [SerializeField] private GameObject pauseMenuPanel;
 
-        [Header("Player")]
+        [Header("玩家")]
         [FormerlySerializedAs("Player")]
         [SerializeField] private PlayerController player;
 
@@ -54,7 +54,7 @@ namespace Odyssey.Systems
 
         private void Update()
         {
-            // Pause input is migrated to InputReader in the player/input milestone.
+            // 暂时保留旧暂停输入；将在玩家输入里程碑迁移到 InputReader。
             if (Input.GetKeyDown(KeyCode.P) || Input.GetKeyDown(KeyCode.Escape))
             {
                 SetPaused(!_isPaused);
@@ -68,7 +68,7 @@ namespace Odyssey.Systems
         {
             if (player == null)
             {
-                Debug.LogError("Save failed: no player is assigned.", this);
+                Debug.LogError("保存失败：未指定玩家。", this);
                 return;
             }
 
@@ -81,7 +81,7 @@ namespace Odyssey.Systems
                 posZ = position.z
             });
 
-            Debug.Log("Game saved.", this);
+            Debug.Log("游戏已保存。", this);
             SetPaused(false);
         }
 
@@ -89,19 +89,19 @@ namespace Odyssey.Systems
         {
             if (player == null)
             {
-                Debug.LogError("Load failed: no player is assigned.", this);
+                Debug.LogError("读取失败：未指定玩家。", this);
                 return;
             }
 
             if (!_saveService.TryLoad(out var data))
             {
-                Debug.LogWarning("No valid save file was found.", this);
+                Debug.LogWarning("未找到有效存档文件。", this);
                 return;
             }
 
             if (data.Version != PlayerSaveData.CurrentVersion)
             {
-                Debug.LogError($"Unsupported save version {data.Version}.", this);
+                Debug.LogError($"不支持存档版本 {data.Version}。", this);
                 return;
             }
 
@@ -111,11 +111,11 @@ namespace Odyssey.Systems
             player.transform.position = new Vector3(data.posX, data.posY, data.posZ);
             controller.enabled = true;
 
-            Debug.Log("Game loaded.", this);
+            Debug.Log("游戏已读取。", this);
             SetPaused(false);
         }
 
-        // Kept temporarily so existing scene Button events remain valid during migration.
+        // 暂时保留旧方法名，保证重构期间场景中的 Button 事件引用不失效。
         public void SaveGame_JSON() => SaveGame();
         public void LoadGame_JSON() => LoadGame();
 

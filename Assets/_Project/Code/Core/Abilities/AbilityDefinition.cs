@@ -18,7 +18,7 @@ namespace Odyssey.Core.Abilities
             IReadOnlyList<GameplayTag> ownedTags = null,
             IReadOnlyList<GameplayTag> cancelTags = null)
         {
-            Id = string.IsNullOrWhiteSpace(id) ? throw new ArgumentException("Ability id cannot be empty.", nameof(id)) : id;
+            Id = string.IsNullOrWhiteSpace(id) ? throw new ArgumentException("技能 ID 不能为空。", nameof(id)) : id;
             CooldownSeconds = cooldownSeconds;
             RequiredTags = requiredTags ?? Array.Empty<GameplayTag>();
             BlockedTags = blockedTags ?? Array.Empty<GameplayTag>();

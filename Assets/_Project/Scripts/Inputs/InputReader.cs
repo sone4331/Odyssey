@@ -3,7 +3,7 @@ using UnityEngine.Events;
 using UnityEngine.InputSystem;
 using Odyssey.Inputs; // 引用刚才生成的代码
 
-[CreateAssetMenu(fileName = "InputReader", menuName = "Odyssey/Input/Input Reader")]
+[CreateAssetMenu(fileName = "InputReader", menuName = "Odyssey/输入/输入读取器")]
 public class InputReader : ScriptableObject, GameInput.IGameplayActions
 {
     // 定义事件：当移动/跳跃发生时，通知其他人

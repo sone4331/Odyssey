@@ -18,56 +18,56 @@ namespace Odyssey.Characters.Player
         public const string DashAbilityId = "player.dash";
         public const string HitAbilityId = "player.hit";
 
-        [Header("Config")]
+        [Header("配置")]
         [SerializeField] private string configId = "player";
         [Tooltip("输入信号源")]
         public InputReader InputReader; // 记得在Inspector里把 PlayerInputReader 拖进去
         
-        [Header("Settings")]
+        [Header("基础设置")]
         // 在 Settings 区域添加一个变量
         public float Gravity = -15f; // 重力加速度
         // 在组件区域添加一个 public 变量，让状态机能修改它
         public float VerticalVelocity; // 当前的垂直速度（跳跃/下落时用）
         
-        [Header("Run Settings")]
+        [Header("移动设置")]
         public float WalkSpeed = 6f;
         public float RunSpeed = 10f; // 加速跑速度
 
-        [Header("Dash Settings")]
+        [Header("冲刺设置")]
         public float DashForce = 20f;        // 冲刺速度
         public float DashDuration = 0.2f;    // 冲刺持续时间 (短促有力)
         public float GroundDashCooldown = 0.5f; // 地面冲刺冷却 (防止无限连冲)
 
-        [Header("Mechanics")]
+        [Header("动作机制")]
         public bool CanAirJump = false;    
         public bool CanAirDash = false;    // [新增] 空中冲刺开关
         
-        [Header("Jump Settings")]
+        [Header("跳跃设置")]
         public float JumpHeight = 3f;      // 普通跳/未蓄满的高度 (原先是4，按你要求改为3)
         public float ChargeJumpHeight = 5f; // [新增] 蓄力跳高度
         public float MinChargeTime = 0.5f;  // [新增] 蓄力判定时间 (超过0.5秒算蓄力)
         public float AirJumpHeight = 2f;   // 空中小跳高度保持不变
         
-        [Header("Wall Mechanics")]
+        [Header("墙面机制")]
         public LayerMask WallLayer; // 【重要】记得去Unity设置一个 Layer 叫 "Wall"，并把墙壁物体设为此层
         public float WallSlideSpeed = -3f; // 滑墙时的下落速度 (负数)
         public float WallJumpUpForce = 12f; // 蹬墙跳：向上的力
         public float WallJumpSideForce = 10f; // 蹬墙跳：向反方向弹开的力
         
-        [Header("Combat Settings")]
+        [Header("战斗设置")]
         public float AttackRange = 1.5f; // 攻击距离
         public int AttackDamage = 1;     // 攻击伤害
         public float AttackCooldown = 0.5f; // 连击间隔 (防止无限点)
         public LayerMask EnemyLayer;     // 敌人的层级 (记得去 Inspector 勾选 Enemy)
         
-        [Header("Health")]
+        [Header("生命值")]
         [FormerlySerializedAs("MaxHealth")]
         [SerializeField] private int maxHealth = 5;
         [FormerlySerializedAs("CurrentHealth")]
         [SerializeField] private int startingHealth = 5;
         public bool IsInvincible = false; // 是否无敌
         
-        [Header("Respawn Settings")]
+        [Header("复活设置")]
         public Transform RespawnPoint; // 复活点位置
         public float RespawnDelay = 3f; // 死亡倒地后，黑屏/等待几秒复活
         private bool _isDead = false;   // 防止死亡期间重复触发扣血
@@ -301,4 +301,3 @@ namespace Odyssey.Characters.Player
     }
     
 }
-

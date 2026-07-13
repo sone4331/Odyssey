@@ -24,7 +24,7 @@ namespace Odyssey.Editor.Config
         /// 按“全部解析、全部校验、最后写资产”的事务顺序导入配置。
         /// 任一表失败时不会覆盖现有有效资产，确保运行时数据库始终来自完整一致的数据集。
         /// </summary>
-        [MenuItem("Odyssey/Config/Import All CSV")]
+        [MenuItem("Odyssey/配置/导入并校验全部 CSV")]
         public static void ImportAll()
         {
             var players = ReadPlayers(PlayerCsvPath);
@@ -43,7 +43,7 @@ namespace Odyssey.Editor.Config
             EditorUtility.SetDirty(asset);
             AssetDatabase.SaveAssets();
             AssetDatabase.Refresh();
-            Debug.Log($"Imported {players.Count} player configs and {enemies.Count} enemy configs to {OutputAssetPath}.");
+            Debug.Log($"已将 {players.Count} 条玩家配置和 {enemies.Count} 条敌人配置导入到 {OutputAssetPath}。");
         }
 
         private static List<PlayerConfigEntry> ReadPlayers(string path)
@@ -84,7 +84,7 @@ namespace Odyssey.Editor.Config
         {
             if (!File.Exists(assetPath))
             {
-                throw new FileNotFoundException("Config source file was not found.", assetPath);
+                throw new FileNotFoundException("未找到配置源文件。", assetPath);
             }
 
             return CsvTableParser.Parse(File.ReadAllText(assetPath));
@@ -107,7 +107,7 @@ namespace Odyssey.Editor.Config
 
             if (errors.Count > 0)
             {
-                throw new InvalidDataException("Game config import failed:\n" + string.Join("\n", errors));
+                throw new InvalidDataException("游戏配置导入失败：\n" + string.Join("\n", errors));
             }
         }
 
@@ -119,12 +119,12 @@ namespace Odyssey.Editor.Config
         {
             if (!ids.Add(id))
             {
-                errors.Add($"Duplicate global config id '{id}'.");
+                errors.Add($"全局配置 ID“{id}”重复。");
             }
 
             foreach (var error in validation.Errors)
             {
-                errors.Add($"{id}: {error}");
+                errors.Add($"配置“{id}”：{error}");
             }
         }
 
@@ -132,7 +132,7 @@ namespace Odyssey.Editor.Config
         {
             if (!float.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out var result))
             {
-                throw new FormatException($"{path}: column '{column}' contains invalid float '{value}'.");
+                throw new FormatException($"{path}：列“{column}”包含无效浮点数“{value}”。");
             }
 
             return result;

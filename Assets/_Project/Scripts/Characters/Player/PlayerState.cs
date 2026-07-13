@@ -23,6 +23,6 @@ namespace Odyssey.Characters.Player
         }
         
         // 比如：通用的重力计算或者地面检测逻辑
-        // protected bool IsGrounded() { ... }
+        // 地面检测将在 Locomotion 重构时统一迁移到感知适配器。
     }
 }

@@ -24,13 +24,13 @@ namespace Odyssey.Unity.Save
         {
             if (string.IsNullOrWhiteSpace(payload))
             {
-                throw new ArgumentException("Save payload cannot be empty.", nameof(payload));
+                throw new ArgumentException("存档载荷不能为空。", nameof(payload));
             }
 
             var data = JsonUtility.FromJson<TSave>(payload);
             if (data == null)
             {
-                throw new InvalidOperationException("Save payload did not produce a data object.");
+                throw new InvalidOperationException("存档载荷未能生成有效数据对象。");
             }
 
             return data;

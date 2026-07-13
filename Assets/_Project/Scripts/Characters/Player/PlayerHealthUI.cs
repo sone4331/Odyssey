@@ -11,7 +11,7 @@ namespace Odyssey.Characters.Player
     /// </summary>
     public class PlayerHealthUI : MonoBehaviour, IHealthDisplayView
     {
-        [Header("References")]
+        [Header("引用")]
         public PlayerController Player; 
         public Image[] HealthIcons; 
 
@@ -19,7 +19,7 @@ namespace Odyssey.Characters.Player
         public Sprite FullHealthSprite;  // 存放亮的彩色水晶
         public Sprite EmptyHealthSprite; // 存放暗的灰色水晶
 
-        [Header("Damage Flash Effect")]
+        [Header("受伤闪屏效果")]
         public Image DamageFlashImage; 
         public Color FlashColor = new Color(1f, 0f, 0f, 0.4f); // 默认半透明红
         public float FlashSpeed = 5f; 

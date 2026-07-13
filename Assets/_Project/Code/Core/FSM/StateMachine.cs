@@ -50,7 +50,7 @@ namespace Odyssey.Core.FSM
         {
             if (!_states.TryGetValue(id, out var state) || state == null)
             {
-                throw new KeyNotFoundException($"No state is registered for '{id}'.");
+                throw new KeyNotFoundException($"未注册 ID 为“{id}”的状态。");
             }
 
             return state;
@@ -60,7 +60,7 @@ namespace Odyssey.Core.FSM
         {
             if (_currentState == null)
             {
-                throw new InvalidOperationException("The state machine has not been initialized.");
+                throw new InvalidOperationException("状态机尚未初始化。");
             }
         }
     }
