@@ -98,6 +98,28 @@ namespace Odyssey.Tests
             Assert.That(target.Config.RunSpeed, Is.EqualTo(11f));
         }
 
+        [Test]
+        public void PlayerConfigEntry_ConvertsCompleteCombatConfiguration()
+        {
+            var entry = new PlayerConfigEntry
+            {
+                id = "player",
+                walkSpeed = 6f,
+                runSpeed = 10f,
+                gravity = -18f,
+                dashForce = 22f,
+                attackDamage = 2,
+                maxHealth = 6
+            };
+
+            var data = entry.ToData();
+
+            Assert.That(data.Gravity, Is.EqualTo(-18f));
+            Assert.That(data.DashForce, Is.EqualTo(22f));
+            Assert.That(data.AttackDamage, Is.EqualTo(2));
+            Assert.That(data.MaxHealth, Is.EqualTo(6));
+        }
+
         [System.Serializable]
         private sealed class TestSaveData
         {

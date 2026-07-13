@@ -42,6 +42,21 @@ namespace Odyssey.Gameplay.Config
                 errors.Add("RunSpeed 必须大于或等于 WalkSpeed。");
             }
 
+            if (config.Gravity >= 0f) errors.Add("Gravity 必须小于零。");
+            if (config.DashForce <= 0f) errors.Add("DashForce 必须大于零。");
+            if (config.DashDuration <= 0f) errors.Add("DashDuration 必须大于零。");
+            if (config.DashCooldown < 0f) errors.Add("DashCooldown 不能小于零。");
+            if (config.JumpHeight <= 0f) errors.Add("JumpHeight 必须大于零。");
+            if (config.ChargeJumpHeight < config.JumpHeight) errors.Add("ChargeJumpHeight 不能小于 JumpHeight。");
+            if (config.MinChargeTime < 0f) errors.Add("MinChargeTime 不能小于零。");
+            if (config.AirJumpHeight <= 0f) errors.Add("AirJumpHeight 必须大于零。");
+            if (config.WallSlideSpeed >= 0f) errors.Add("WallSlideSpeed 必须小于零。");
+            if (config.WallJumpForce <= 0f) errors.Add("WallJumpForce 必须大于零。");
+            if (config.AttackDamage <= 0) errors.Add("AttackDamage 必须大于零。");
+            if (config.AttackRange <= 0f) errors.Add("AttackRange 必须大于零。");
+            if (config.AttackCooldown < 0f) errors.Add("AttackCooldown 不能小于零。");
+            if (config.MaxHealth <= 0) errors.Add("MaxHealth 必须大于零。");
+
             return new ConfigValidationResult(errors);
         }
 

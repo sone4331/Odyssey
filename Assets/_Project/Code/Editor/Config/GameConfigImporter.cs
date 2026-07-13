@@ -56,7 +56,21 @@ namespace Odyssey.Editor.Config
                 {
                     id = row["id"],
                     walkSpeed = ParseFloat(row["walkSpeed"], path, "walkSpeed"),
-                    runSpeed = ParseFloat(row["runSpeed"], path, "runSpeed")
+                    runSpeed = ParseFloat(row["runSpeed"], path, "runSpeed"),
+                    gravity = ParseFloat(row["gravity"], path, "gravity"),
+                    dashForce = ParseFloat(row["dashForce"], path, "dashForce"),
+                    dashDuration = ParseFloat(row["dashDuration"], path, "dashDuration"),
+                    dashCooldown = ParseFloat(row["dashCooldown"], path, "dashCooldown"),
+                    jumpHeight = ParseFloat(row["jumpHeight"], path, "jumpHeight"),
+                    chargeJumpHeight = ParseFloat(row["chargeJumpHeight"], path, "chargeJumpHeight"),
+                    minChargeTime = ParseFloat(row["minChargeTime"], path, "minChargeTime"),
+                    airJumpHeight = ParseFloat(row["airJumpHeight"], path, "airJumpHeight"),
+                    wallSlideSpeed = ParseFloat(row["wallSlideSpeed"], path, "wallSlideSpeed"),
+                    wallJumpForce = ParseFloat(row["wallJumpForce"], path, "wallJumpForce"),
+                    attackDamage = ParseInt(row["attackDamage"], path, "attackDamage"),
+                    attackRange = ParseFloat(row["attackRange"], path, "attackRange"),
+                    attackCooldown = ParseFloat(row["attackCooldown"], path, "attackCooldown"),
+                    maxHealth = ParseInt(row["maxHealth"], path, "maxHealth")
                 });
             }
 
@@ -133,6 +147,16 @@ namespace Odyssey.Editor.Config
             if (!float.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out var result))
             {
                 throw new FormatException($"{path}：列“{column}”包含无效浮点数“{value}”。");
+            }
+
+            return result;
+        }
+
+        private static int ParseInt(string value, string path, string column)
+        {
+            if (!int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var result))
+            {
+                throw new FormatException($"{path}：列“{column}”包含无效整数“{value}”。");
             }
 
             return result;

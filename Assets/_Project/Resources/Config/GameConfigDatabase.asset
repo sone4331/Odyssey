@@ -16,6 +16,20 @@ MonoBehaviour:
   - id: player
     walkSpeed: 6
     runSpeed: 10
+    gravity: -15
+    dashForce: 20
+    dashDuration: 0.2
+    dashCooldown: 0.5
+    jumpHeight: 3
+    chargeJumpHeight: 5
+    minChargeTime: 0.5
+    airJumpHeight: 2
+    wallSlideSpeed: -3
+    wallJumpForce: 8
+    attackDamage: 1
+    attackRange: 2
+    attackCooldown: 0.5
+    maxHealth: 5
   enemies:
   - id: chomper
     chaseRange: 10

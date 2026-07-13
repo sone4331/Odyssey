@@ -26,16 +26,61 @@ namespace Odyssey.Gameplay.Config
     /// </summary>
     public sealed class PlayerConfigData : IConfigRecord
     {
-        public PlayerConfigData(string id, float walkSpeed, float runSpeed)
+        public PlayerConfigData(
+            string id,
+            float walkSpeed,
+            float runSpeed,
+            float gravity = -15f,
+            float dashForce = 20f,
+            float dashDuration = 0.2f,
+            float dashCooldown = 0.5f,
+            float jumpHeight = 3f,
+            float chargeJumpHeight = 5f,
+            float minChargeTime = 0.5f,
+            float airJumpHeight = 2f,
+            float wallSlideSpeed = -3f,
+            float wallJumpForce = 8f,
+            int attackDamage = 1,
+            float attackRange = 2f,
+            float attackCooldown = 0.5f,
+            int maxHealth = 5)
         {
             Id = id;
             WalkSpeed = walkSpeed;
             RunSpeed = runSpeed;
+            Gravity = gravity;
+            DashForce = dashForce;
+            DashDuration = dashDuration;
+            DashCooldown = dashCooldown;
+            JumpHeight = jumpHeight;
+            ChargeJumpHeight = chargeJumpHeight;
+            MinChargeTime = minChargeTime;
+            AirJumpHeight = airJumpHeight;
+            WallSlideSpeed = wallSlideSpeed;
+            WallJumpForce = wallJumpForce;
+            AttackDamage = attackDamage;
+            AttackRange = attackRange;
+            AttackCooldown = attackCooldown;
+            MaxHealth = maxHealth;
         }
 
         public string Id { get; }
         public float WalkSpeed { get; }
         public float RunSpeed { get; }
+        public float Gravity { get; }
+        public float DashForce { get; }
+        public float DashDuration { get; }
+        public float DashCooldown { get; }
+        public float JumpHeight { get; }
+        public float ChargeJumpHeight { get; }
+        public float MinChargeTime { get; }
+        public float AirJumpHeight { get; }
+        public float WallSlideSpeed { get; }
+        public float WallJumpForce { get; }
+        public int AttackDamage { get; }
+        public float AttackRange { get; }
+        public float AttackCooldown { get; }
+        public int MaxHealth { get; }
     }
 
     /// <summary>

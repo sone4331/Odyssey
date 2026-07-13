@@ -1,2 +1,2 @@
-id,walkSpeed,runSpeed
-player,6,10
+id,walkSpeed,runSpeed,gravity,dashForce,dashDuration,dashCooldown,jumpHeight,chargeJumpHeight,minChargeTime,airJumpHeight,wallSlideSpeed,wallJumpForce,attackDamage,attackRange,attackCooldown,maxHealth
+player,6,10,-15,20,0.2,0.5,3,5,0.5,2,-3,8,1,2,0.5,5
