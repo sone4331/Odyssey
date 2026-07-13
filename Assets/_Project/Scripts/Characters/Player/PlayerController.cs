@@ -83,6 +83,7 @@ namespace Odyssey.Characters.Player
         public int CurrentHealth => _runtime?.Health.Current ?? Mathf.Clamp(startingHealth, 0, maxHealth);
         public IAbilitySystem Abilities => _runtime?.Abilities;
         public event System.Action<HealthChanged> HealthChanged;
+        public event System.Action RuntimeConfigured;
 
         private PlayerRuntimeSystems _runtime;
         private PlayerConfigData _appliedConfig;
@@ -241,6 +242,7 @@ namespace Odyssey.Characters.Player
             maxHealth = config.MaxHealth;
             RebuildRuntimeSystems(config, preservedHealth);
             _appliedConfig = config;
+            RuntimeConfigured?.Invoke();
         }
 
         private PlayerConfigData CreateInspectorConfig()

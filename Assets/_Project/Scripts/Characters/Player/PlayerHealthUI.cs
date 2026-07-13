@@ -87,6 +87,7 @@ namespace Odyssey.Characters.Player
             _boundPlayer = Player;
             _presenter = new HealthDisplayPresenter(this, Player.MaxHealth);
             _boundPlayer.HealthChanged += OnHealthChanged;
+            _boundPlayer.RuntimeConfigured += OnRuntimeConfigured;
             _presenter.Initialize(_boundPlayer.CurrentHealth);
         }
 
@@ -95,6 +96,7 @@ namespace Odyssey.Characters.Player
             if (_boundPlayer != null)
             {
                 _boundPlayer.HealthChanged -= OnHealthChanged;
+                _boundPlayer.RuntimeConfigured -= OnRuntimeConfigured;
             }
 
             _boundPlayer = null;
@@ -104,6 +106,11 @@ namespace Odyssey.Characters.Player
         private void OnHealthChanged(HealthChanged change)
         {
             _presenter?.Handle(change);
+        }
+
+        private void OnRuntimeConfigured()
+        {
+            _presenter?.Reconfigure(_boundPlayer.CurrentHealth, _boundPlayer.MaxHealth);
         }
     }
 }

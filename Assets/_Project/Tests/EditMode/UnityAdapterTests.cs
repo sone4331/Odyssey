@@ -87,6 +87,18 @@ namespace Odyssey.Tests
         }
 
         [Test]
+        public void HealthDisplayPresenter_ReconfiguresMaximumHealth()
+        {
+            var view = new RecordingHealthDisplay();
+            var presenter = new HealthDisplayPresenter(view, 5);
+
+            presenter.Reconfigure(6, 7);
+
+            Assert.That(view.Current, Is.EqualTo(6));
+            Assert.That(view.Maximum, Is.EqualTo(7));
+        }
+
+        [Test]
         public void PlayerConfigBinder_AppliesSelectedConfigToRuntimeTarget()
         {
             var provider = new GameConfigDatabase(new PlayerConfigData("player", 7f, 11f));

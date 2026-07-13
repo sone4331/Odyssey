@@ -19,7 +19,7 @@ namespace Odyssey.Unity.UI
     public sealed class HealthDisplayPresenter
     {
         private readonly IHealthDisplayView _view;
-        private readonly int _maximum;
+        private int _maximum;
 
         public HealthDisplayPresenter(IHealthDisplayView view, int maximum)
         {
@@ -31,6 +31,21 @@ namespace Odyssey.Unity.UI
 
         public void Initialize(int current)
         {
+            _view.SetHealth(Clamp(current), _maximum);
+        }
+
+        /// <summary>
+        /// 在运行时配置提交后刷新生命上限和当前值，避免 UI 保留 Inspector 的旧上限。
+        /// 该方法只更新展示约束，不修改 Gameplay Health。
+        /// </summary>
+        public void Reconfigure(int current, int maximum)
+        {
+            if (maximum <= 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(maximum));
+            }
+
+            _maximum = maximum;
             _view.SetHealth(Clamp(current), _maximum);
         }
 
