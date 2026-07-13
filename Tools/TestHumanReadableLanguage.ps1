@@ -12,8 +12,6 @@ if (-not $SourceRoot -or $SourceRoot.Count -eq 0)
         (Join-Path $projectRoot "README.md"),
         (Join-Path $projectRoot "Docs"),
         (Join-Path $projectRoot "Assets\_Project\Code"),
-        (Join-Path $projectRoot "Assets\_Project\Scripts"),
-        (Join-Path $projectRoot "Assets\_Project\MyScripts"),
         (Join-Path $projectRoot "Assets\_Project\Tests"),
         (Join-Path $projectRoot "Tests"),
         (Join-Path $projectRoot "Tools")

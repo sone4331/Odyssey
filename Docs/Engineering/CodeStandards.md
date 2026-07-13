@@ -9,6 +9,8 @@
 - UI 通过领域事件和 Presenter 更新，不轮询或直接修改 Gameplay 状态。
 - 只有出现真实跨层边界、测试替身或第二个实现时才新增接口。
 
+所有项目自有 C# 必须位于 `Assets/_Project/Code` 的对应程序集目录。场景与表现资产进入 `Content`，设计源数据和运行时配置进入 `Data`；禁止重新创建含义不明的 `Scripts`、`MyScripts` 或 `Generated` 根目录。
+
 ## 中文架构注释
 
 核心生产类型的 XML `summary` 必须回答：

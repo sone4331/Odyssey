@@ -10,9 +10,7 @@ $projectRoot = Split-Path -Parent $PSScriptRoot
 if (-not $SourceRoot -or $SourceRoot.Count -eq 0)
 {
     $SourceRoot = @(
-        (Join-Path $projectRoot "Assets\_Project\Code"),
-        (Join-Path $projectRoot "Assets\_Project\Scripts"),
-        (Join-Path $projectRoot "Assets\_Project\MyScripts")
+        (Join-Path $projectRoot "Assets\_Project\Code")
     )
 }
 

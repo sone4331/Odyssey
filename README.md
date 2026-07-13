@@ -27,6 +27,18 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\Tools\Tests\RunHumanReadab
 - 摄像机：Cinemachine `2.10.0`
 - 主要开发与演示平台：Windows
 
+## 项目目录
+
+```text
+Assets/_Project/
+├─ Code/       程序集边界内的 Core、Gameplay、Unity 与 Editor 代码
+├─ Content/    场景、Prefab、动画控制器与输入动作资产
+├─ Data/       设计 CSV、运行时 Resources 数据库与 Unity 配置资产
+└─ Tests/      Unity EditMode 测试
+```
+
+旧玩家状态机暂存于 `Code/Unity/Legacy/FSM`，仅服务当前玩家迁移；玩家切换到纯 C# 延迟提交状态机后必须删除该目录。
+
 ## 第三方内容
 
 当前原型场景引用 Unity 3D Game Kit Lite。该资源包和 TextMesh Pro 示例资产不会随公开源码重新分发。打开 `Assets/_Project/Content/Scenes/Level_01.unity` 前，需要从合法来源导入对应的原始资源包。

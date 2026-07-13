@@ -228,6 +228,12 @@ namespace Odyssey.Tests
             Assert.That(AssetDatabase.AssetPathToGUID(playerPath), Is.EqualTo("cd9defc8c3d24d3d971a34755db37fe1"));
             Assert.That(AssetDatabase.LoadAssetAtPath<InputReader>(inputReaderPath), Is.Not.Null);
             Assert.That(AssetDatabase.LoadAssetAtPath<Object>("Assets/_Project/Scenes/Level_01.unity"), Is.Null);
+            Assert.That(AssetDatabase.IsValidFolder("Assets/_Project/Code"), Is.True);
+            Assert.That(AssetDatabase.IsValidFolder("Assets/_Project/Content"), Is.True);
+            Assert.That(AssetDatabase.IsValidFolder("Assets/_Project/Data"), Is.True);
+            Assert.That(AssetDatabase.IsValidFolder("Assets/_Project/Scripts"), Is.False);
+            Assert.That(AssetDatabase.IsValidFolder("Assets/_Project/MyScripts"), Is.False);
+            Assert.That(AssetDatabase.IsValidFolder("Assets/_Project/Generated"), Is.False);
         }
 
         [System.Serializable]
