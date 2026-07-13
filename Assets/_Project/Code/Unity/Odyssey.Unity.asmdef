@@ -4,7 +4,8 @@
   "references": [
     "Odyssey.Core",
     "Odyssey.Gameplay",
-    "Unity.ugui"
+    "Unity.ugui",
+    "Unity.InputSystem"
   ],
   "includePlatforms": [],
   "excludePlatforms": [],
