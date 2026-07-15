@@ -12,7 +12,7 @@ namespace Odyssey.Characters.Player
 {
     // RequireComponent 确保你挂这个脚本时，Unity会自动帮你挂上 CharacterController
     [RequireComponent(typeof(CharacterController))]
-    public class PlayerController : MonoBehaviour, IPlayerConfigTarget
+    public class PlayerController : MonoBehaviour, IConfigTarget<PlayerConfigData>
     {
         public const string AttackAbilityId = PlayerRuntimeSystems.AttackAbilityId;
         public const string DashAbilityId = PlayerRuntimeSystems.DashAbilityId;

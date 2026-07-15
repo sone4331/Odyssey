@@ -1,4 +1,5 @@
 using System;
+using Odyssey.Characters.Enemies;
 using Odyssey.Characters.Player;
 using Odyssey.Systems;
 using Odyssey.Unity.Config;
@@ -48,7 +49,12 @@ namespace Odyssey.Bootstrap
             {
                 foreach (var player in root.GetComponentsInChildren<PlayerController>(true))
                 {
-                    PlayerConfigBinder.Bind(_context.Configs, player.ConfigId, player);
+                    GameConfigBinder.Bind(_context.Configs, player.ConfigId, player);
+                }
+
+                foreach (var enemy in root.GetComponentsInChildren<Enemy>(true))
+                {
+                    GameConfigBinder.Bind(_context.Configs, enemy.ConfigId, enemy);
                 }
 
                 foreach (var saveManager in root.GetComponentsInChildren<SaveManager>(true))

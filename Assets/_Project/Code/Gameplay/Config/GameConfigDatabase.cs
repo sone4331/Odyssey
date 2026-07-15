@@ -91,16 +91,28 @@ namespace Odyssey.Gameplay.Config
     /// </summary>
     public sealed class EnemyConfigData : IConfigRecord
     {
-        public EnemyConfigData(string id, float chaseRange, float attackRange)
+        public EnemyConfigData(
+            string id,
+            float chaseRange,
+            float attackRange,
+            int maxHealth = 3,
+            int attackDamage = 1,
+            float attackCooldown = 2f)
         {
             Id = id;
             ChaseRange = chaseRange;
             AttackRange = attackRange;
+            MaxHealth = maxHealth;
+            AttackDamage = attackDamage;
+            AttackCooldown = attackCooldown;
         }
 
         public string Id { get; }
         public float ChaseRange { get; }
         public float AttackRange { get; }
+        public int MaxHealth { get; }
+        public int AttackDamage { get; }
+        public float AttackCooldown { get; }
     }
 
     /// <summary>

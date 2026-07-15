@@ -107,7 +107,11 @@ namespace Odyssey.Unity.Config
         public string id;
         public float chaseRange;
         public float attackRange;
+        public int maxHealth;
+        public int attackDamage;
+        public float attackCooldown;
 
-        public EnemyConfigData ToData() => new EnemyConfigData(id, chaseRange, attackRange);
+        public EnemyConfigData ToData() => new EnemyConfigData(
+            id, chaseRange, attackRange, maxHealth, attackDamage, attackCooldown);
     }
 }

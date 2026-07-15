@@ -11,6 +11,8 @@ internal static class ConfigDatabaseSpecs
         Spec.Run("玩家配置保存完整战斗参数", PlayerConfigStoresCompleteCombatValues);
         Spec.Run("玩家配置拒绝非法战斗参数", PlayerConfigRejectsInvalidCombatValues);
         Spec.Run("敌人配置拒绝超过追击范围的攻击范围", EnemyConfigRejectsAttackRangeBeyondChaseRange);
+        Spec.Run("敌人配置保存完整战斗参数", EnemyConfigStoresCompleteCombatValues);
+        Spec.Run("敌人配置拒绝非法战斗参数", EnemyConfigRejectsInvalidCombatValues);
     }
 
     private static void ConfigDatabaseRejectsDuplicateIds()
@@ -83,5 +85,31 @@ internal static class ConfigDatabaseSpecs
         var result = GameConfigValidator.Validate(new EnemyConfigData("chomper", 2f, 5f));
 
         Spec.True(!result.IsValid, "超过追击范围的攻击范围被错误接受");
+    }
+
+    private static void EnemyConfigStoresCompleteCombatValues()
+    {
+        var config = new EnemyConfigData(
+            "chomper", 10f, 2f,
+            maxHealth: 4,
+            attackDamage: 2,
+            attackCooldown: 1.5f);
+
+        Spec.Equal(4, config.MaxHealth, "敌人最大生命没有被保存");
+        Spec.Equal(2, config.AttackDamage, "敌人攻击伤害没有被保存");
+        Spec.Equal(1.5f, config.AttackCooldown, "敌人攻击冷却没有被保存");
+    }
+
+    private static void EnemyConfigRejectsInvalidCombatValues()
+    {
+        var config = new EnemyConfigData(
+            "chomper", 10f, 2f,
+            maxHealth: 0,
+            attackDamage: 0,
+            attackCooldown: -1f);
+
+        var result = GameConfigValidator.Validate(config);
+
+        Spec.True(!result.IsValid, "敌人非法战斗参数被错误接受");
     }
 }

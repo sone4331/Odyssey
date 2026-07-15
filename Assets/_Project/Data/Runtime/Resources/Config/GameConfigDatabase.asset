@@ -35,6 +35,12 @@ MonoBehaviour:
   - id: chomper
     chaseRange: 10
     attackRange: 2
+    maxHealth: 3
+    attackDamage: 1
+    attackCooldown: 2
   - id: spitter
     chaseRange: 12
     attackRange: 6
+    maxHealth: 3
+    attackDamage: 1
+    attackCooldown: 2

@@ -88,7 +88,10 @@ namespace Odyssey.Editor.Config
                 {
                     id = row["id"],
                     chaseRange = ParseFloat(row["chaseRange"], path, "chaseRange"),
-                    attackRange = ParseFloat(row["attackRange"], path, "attackRange")
+                    attackRange = ParseFloat(row["attackRange"], path, "attackRange"),
+                    maxHealth = ParseInt(row["maxHealth"], path, "maxHealth"),
+                    attackDamage = ParseInt(row["attackDamage"], path, "attackDamage"),
+                    attackCooldown = ParseFloat(row["attackCooldown"], path, "attackCooldown")
                 });
             }
 

@@ -80,6 +80,10 @@ namespace Odyssey.Gameplay.Config
                 errors.Add("AttackRange 必须为正数且不能大于 ChaseRange。");
             }
 
+            if (config.MaxHealth <= 0) errors.Add("MaxHealth 必须大于零。");
+            if (config.AttackDamage <= 0) errors.Add("AttackDamage 必须大于零。");
+            if (config.AttackCooldown < 0f) errors.Add("AttackCooldown 不能小于零。");
+
             return new ConfigValidationResult(errors);
         }
 

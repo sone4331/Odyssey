@@ -106,15 +106,41 @@ namespace Odyssey.Tests
         }
 
         [Test]
-        public void PlayerConfigBinder_AppliesSelectedConfigToRuntimeTarget()
+        public void GameConfigBinder_AppliesSelectedConfigToTypedTarget()
         {
             var provider = new GameConfigDatabase(new PlayerConfigData("player", 7f, 11f));
             var target = new RecordingPlayerConfigTarget();
 
-            PlayerConfigBinder.Bind(provider, "player", target);
+            GameConfigBinder.Bind(provider, "player", target);
 
             Assert.That(target.Config.WalkSpeed, Is.EqualTo(7f));
             Assert.That(target.Config.RunSpeed, Is.EqualTo(11f));
+        }
+
+        [Test]
+        public void Enemy_UsesSharedHealthAndTypedConfiguration()
+        {
+            var root = new GameObject("测试敌人");
+            var enemy = root.AddComponent<Odyssey.Characters.Enemies.Enemy>();
+            try
+            {
+                var config = new EnemyConfigData(
+                    "chomper", 10f, 2f,
+                    maxHealth: 4,
+                    attackDamage: 2,
+                    attackCooldown: 1.5f);
+
+                GameConfigBinder.Bind(new GameConfigDatabase(config), "chomper", enemy);
+                enemy.TakeDamage(1);
+
+                Assert.That(enemy.CurrentHealth, Is.EqualTo(3));
+                Assert.That(enemy.AttackDamage, Is.EqualTo(2));
+                Assert.That(enemy.AttackCooldown, Is.EqualTo(1.5f));
+            }
+            finally
+            {
+                Object.DestroyImmediate(root);
+            }
         }
 
         [Test]
@@ -298,7 +324,7 @@ namespace Odyssey.Tests
             }
         }
 
-        private sealed class RecordingPlayerConfigTarget : IPlayerConfigTarget
+        private sealed class RecordingPlayerConfigTarget : IConfigTarget<PlayerConfigData>
         {
             public PlayerConfigData Config { get; private set; }
 
