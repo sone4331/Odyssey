@@ -2,9 +2,12 @@ using NUnit.Framework;
 using Odyssey.Core.Abilities;
 using Odyssey.Core.FSM;
 using Odyssey.Core.Tags;
+using Odyssey.Bootstrap;
 using Odyssey.Gameplay.AI;
+using Odyssey.Gameplay.Application;
 using Odyssey.Gameplay.Combat;
 using Odyssey.Gameplay.Config;
+using Odyssey.Gameplay.Save;
 using Odyssey.Unity.Save;
 using Odyssey.Unity.UI;
 using Odyssey.Unity.Config;
@@ -174,6 +177,46 @@ namespace Odyssey.Tests
         }
 
         [Test]
+        public void ApplicationContext_ExposesExplicitApplicationServices()
+        {
+            var configs = new GameConfigDatabase();
+            var saves = new RecordingPlayerSaveService();
+
+            var context = new ApplicationContext(configs, saves);
+
+            Assert.That(context.Configs, Is.SameAs(configs));
+            Assert.That(context.SaveService, Is.SameAs(saves));
+        }
+
+        [Test]
+        public void GameplaySceneInstaller_OwnsAndDisposesSceneSession()
+        {
+            var root = new GameObject("测试场景安装器");
+            var configs = new GameConfigDatabase();
+            var context = new ApplicationContext(configs, new RecordingPlayerSaveService());
+            var installer = root.AddComponent<GameplaySceneInstaller>();
+            try
+            {
+                installer.Install(context);
+                var session = installer.Session;
+                var events = session.Events;
+
+                installer.Install(context);
+                Assert.That(installer.Session, Is.SameAs(session));
+
+                installer.Dispose();
+                Assert.Throws<System.ObjectDisposedException>(() => events.Publish(1));
+            }
+            finally
+            {
+                if (root != null)
+                {
+                    Object.DestroyImmediate(root);
+                }
+            }
+        }
+
+        [Test]
         public void HealthIconPool_GrowsHidesAndReusesIcons()
         {
             var container = new GameObject("生命图标容器", typeof(RectTransform));
@@ -270,6 +313,19 @@ namespace Odyssey.Tests
             public void Apply(PlayerConfigData config)
             {
                 Config = config;
+            }
+        }
+
+        private sealed class RecordingPlayerSaveService : ISaveService<PlayerSaveData>
+        {
+            public void Save(PlayerSaveData data)
+            {
+            }
+
+            public bool TryLoad(out PlayerSaveData data)
+            {
+                data = null;
+                return false;
             }
         }
     }

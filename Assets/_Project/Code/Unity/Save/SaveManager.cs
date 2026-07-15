@@ -1,34 +1,10 @@
-using System;
 using Odyssey.Characters.Player;
 using Odyssey.Gameplay.Save;
-using Odyssey.Unity.Save;
 using UnityEngine;
 using UnityEngine.Serialization;
 
 namespace Odyssey.Systems
 {
-    /// <summary>
-    /// 定义当前玩家存档的版本化 DTO，只保存可序列化数据，不包含场景对象或业务行为。
-    /// 通过显式版本字段支持后续迁移，避免将 Unity 组件结构直接固化到磁盘格式。
-    /// </summary>
-    [Serializable]
-    public sealed class PlayerSaveData : IVersionedSave
-    {
-        public const int CurrentVersion = 1;
-
-        public int version = CurrentVersion;
-        public int health;
-        public float posX;
-        public float posY;
-        public float posZ;
-
-        public int Version
-        {
-            get => version;
-            set => version = value;
-        }
-    }
-
     /// <summary>
     /// 作为 Unity 场景适配器收集与恢复玩家快照，并把持久化委托给 ISaveService。
     /// 采用 Facade 与 Adapter 模式兼容现有按钮绑定，同时将 JSON、原子写入和版本规则移出 MonoBehaviour。
@@ -44,12 +20,15 @@ namespace Odyssey.Systems
         [SerializeField] private PlayerController player;
 
         private bool _isPaused;
-        private AtomicFileSaveService<PlayerSaveData> _saveService;
+        private ISaveService<PlayerSaveData> _saveService;
 
-        private void Awake()
+        /// <summary>
+        /// 由场景 Installer 注入应用级存档端口，避免场景组件自行决定文件路径、编码器和服务生命周期。
+        /// 重复注入同一实例保持幂等，便于 Bootstrap 的场景加载回调安全重入。
+        /// </summary>
+        public void Configure(ISaveService<PlayerSaveData> saveService)
         {
-            var path = System.IO.Path.Combine(Application.persistentDataPath, "SaveData.json");
-            _saveService = new AtomicFileSaveService<PlayerSaveData>(path, new JsonSaveCodec<PlayerSaveData>());
+            _saveService = saveService ?? throw new System.ArgumentNullException(nameof(saveService));
         }
 
         private void Update()
@@ -66,6 +45,12 @@ namespace Odyssey.Systems
 
         public void SaveGame()
         {
+            if (_saveService == null)
+            {
+                Debug.LogError("保存失败：场景尚未注入存档服务。", this);
+                return;
+            }
+
             if (player == null)
             {
                 Debug.LogError("保存失败：未指定玩家。", this);
@@ -87,6 +72,12 @@ namespace Odyssey.Systems
 
         public void LoadGame()
         {
+            if (_saveService == null)
+            {
+                Debug.LogError("读取失败：场景尚未注入存档服务。", this);
+                return;
+            }
+
             if (player == null)
             {
                 Debug.LogError("读取失败：未指定玩家。", this);

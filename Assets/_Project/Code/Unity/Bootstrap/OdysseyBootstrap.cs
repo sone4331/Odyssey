@@ -1,13 +1,14 @@
-using Odyssey.Characters.Player;
+using Odyssey.Gameplay.Save;
 using Odyssey.Unity.Config;
+using Odyssey.Unity.Save;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 
 namespace Odyssey.Bootstrap
 {
     /// <summary>
-    /// 作为 Composition Root 创建跨场景服务，并在场景加载后完成配置到角色的依赖绑定。
-    /// 集中装配可避免角色自行访问全局单例或 Resources；当前 Resources 查找只存在于该 Unity 边界。
+    /// 作为应用级 Composition Root 创建跨场景配置与存档服务，并把具体场景装配委托给 Installer。
+    /// 集中装配可避免角色自行访问全局单例或 Resources；应用与场景生命周期的边界只存在于该 Unity 入口。
     /// </summary>
     [DefaultExecutionOrder(-1000)]
     public sealed class OdysseyBootstrap : MonoBehaviour
@@ -15,6 +16,7 @@ namespace Odyssey.Bootstrap
         private const string ConfigResourcePath = "Config/GameConfigDatabase";
 
         private GameConfigAsset _configs;
+        private ApplicationContext _context;
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
         private static void Install()
@@ -36,14 +38,21 @@ namespace Odyssey.Bootstrap
             if (_configs == null)
             {
                 Debug.LogError($"Resources/{ConfigResourcePath} 缺少运行时配置。");
+                return;
             }
+
+            var savePath = System.IO.Path.Combine(Application.persistentDataPath, "SaveData.json");
+            var saveService = new AtomicFileSaveService<PlayerSaveData>(
+                savePath,
+                new JsonSaveCodec<PlayerSaveData>());
+            _context = new ApplicationContext(_configs, saveService);
 
             SceneManager.sceneLoaded += OnSceneLoaded;
         }
 
         private void Start()
         {
-            BindPlayers();
+            InstallScene(SceneManager.GetActiveScene());
         }
 
         private void OnDestroy()
@@ -53,27 +62,38 @@ namespace Odyssey.Bootstrap
 
         private void OnSceneLoaded(Scene scene, LoadSceneMode mode)
         {
-            BindPlayers();
+            InstallScene(scene);
         }
 
         /// <summary>
-        /// 在场景稳定后查找配置目标并一次性注入只读配置。
-        /// 绑定失败不应静默回退到另一条数据源，缺失配置由 Provider 明确抛错以暴露构建问题。
+        /// 为目标场景查找或创建唯一 Installer，并显式交付应用上下文。
+        /// Bootstrap 只了解场景装配入口，不再直接依赖玩家、UI 或其他具体业务组件。
         /// </summary>
-        private void BindPlayers()
+        private void InstallScene(Scene scene)
         {
-            if (_configs == null)
+            if (_context == null || !scene.IsValid() || !scene.isLoaded)
             {
                 return;
             }
 
-            var players = FindObjectsByType<PlayerController>(
-                FindObjectsInactive.Include,
-                FindObjectsSortMode.None);
-            foreach (var player in players)
+            GameplaySceneInstaller installer = null;
+            foreach (var root in scene.GetRootGameObjects())
             {
-                PlayerConfigBinder.Bind(_configs, player.ConfigId, player);
+                installer = root.GetComponentInChildren<GameplaySceneInstaller>(true);
+                if (installer != null)
+                {
+                    break;
+                }
             }
+
+            if (installer == null)
+            {
+                var installerRoot = new GameObject("[玩法场景安装器]");
+                SceneManager.MoveGameObjectToScene(installerRoot, scene);
+                installer = installerRoot.AddComponent<GameplaySceneInstaller>();
+            }
+
+            installer.Install(_context);
         }
     }
 }

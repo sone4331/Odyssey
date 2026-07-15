@@ -4,6 +4,7 @@ internal static class Program
     {
         StateMachineSpecs.Register();
         EventBusSpecs.Register();
+        GameplaySessionSpecs.Register();
         GameplayTagSpecs.Register();
         AbilitySystemSpecs.Register();
         HealthSpecs.Register();
