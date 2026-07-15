@@ -4,7 +4,6 @@ using Odyssey.Core.FSM;
 using Odyssey.Core.Tags;
 using Odyssey.Bootstrap;
 using Odyssey.Gameplay.AI;
-using Odyssey.Gameplay.Application;
 using Odyssey.Gameplay.Combat;
 using Odyssey.Gameplay.Config;
 using Odyssey.Gameplay.Save;
@@ -189,7 +188,7 @@ namespace Odyssey.Tests
         }
 
         [Test]
-        public void GameplaySceneInstaller_OwnsAndDisposesSceneSession()
+        public void GameplaySceneInstaller_ReinstallingSameContextIsIdempotent()
         {
             var root = new GameObject("测试场景安装器");
             var configs = new GameConfigDatabase();
@@ -198,14 +197,7 @@ namespace Odyssey.Tests
             try
             {
                 installer.Install(context);
-                var session = installer.Session;
-                var events = session.Events;
-
-                installer.Install(context);
-                Assert.That(installer.Session, Is.SameAs(session));
-
-                installer.Dispose();
-                Assert.Throws<System.ObjectDisposedException>(() => events.Publish(1));
+                Assert.DoesNotThrow(() => installer.Install(context));
             }
             finally
             {

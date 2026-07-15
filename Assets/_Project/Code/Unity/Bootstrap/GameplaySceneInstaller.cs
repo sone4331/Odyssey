@@ -1,6 +1,5 @@
 using System;
 using Odyssey.Characters.Player;
-using Odyssey.Gameplay.Application;
 using Odyssey.Systems;
 using Odyssey.Unity.Config;
 using UnityEngine;
@@ -8,17 +7,12 @@ using UnityEngine;
 namespace Odyssey.Bootstrap
 {
     /// <summary>
-    /// 作为单个玩法场景的 Composition Root 创建会话，并把应用服务注入该场景中的适配器。
-    /// 采用 Installer 与作用域所有权模式，使 Bootstrap 不依赖具体玩家、UI 或存档组件，并保证场景卸载时释放会话事件。
+    /// 作为单个玩法场景的 Composition Root，把应用级服务注入该场景中的玩家与存档适配器。
+    /// 采用 Installer 模式使 Bootstrap 不依赖具体业务组件；当前不创建空壳 Session，待联网出现真实会话状态后再引入。
     /// </summary>
-    public sealed class GameplaySceneInstaller : MonoBehaviour, IDisposable
+    public sealed class GameplaySceneInstaller : MonoBehaviour
     {
         private ApplicationContext _context;
-
-        /// <summary>
-        /// 获取当前场景拥有的游戏会话，供后续 Presenter、AI 和网络适配器订阅会话事件。
-        /// </summary>
-        public GameplaySession Session { get; private set; }
 
         /// <summary>
         /// 使用应用上下文完成一次性场景装配。重复传入同一上下文保持幂等，传入不同上下文则快速失败以暴露生命周期错误。
@@ -41,24 +35,7 @@ namespace Odyssey.Bootstrap
             }
 
             _context = context;
-            Session = new GameplaySession();
             InstallSceneTargets();
-        }
-
-        private void OnDestroy()
-        {
-            Dispose();
-        }
-
-        /// <summary>
-        /// 显式结束场景作用域并释放 Session；运行时由 OnDestroy 调用，测试和异常退出也可复用同一清理路径。
-        /// 方法允许重复调用，避免场景卸载和上层主动清理同时发生时重复释放资源。
-        /// </summary>
-        public void Dispose()
-        {
-            Session?.Dispose();
-            Session = null;
-            _context = null;
         }
 
         /// <summary>
