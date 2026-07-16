@@ -1,18 +1,28 @@
 # Odyssey
 
-Odyssey 是一个面向 Unity 玩法客户端岗位的作品集项目，重点展示角色控制、动作战斗、可解释 AI、数据驱动、自动化测试、性能分析和 Host 权威联机能力。
+Odyssey 是一个面向 Unity 玩法客户端岗位的作品集项目，当前版本重点展示角色控制、动作战斗、可解释 AI、数据驱动、存档与自动化测试。联网将作为独立的下一阶段扩展，不在当前单机闭环中伪装为已完成功能。
 
 ## 当前状态
 
-项目的工业化基线已经可以实际运行：Core、Gameplay、Unity 与 Editor 程序集边界已经建立；玩家与怪物战斗共享 Health/Damage 契约；玩家使用移动轴与动作轴两条正交状态机，状态切换延迟提交且状态实例复用；配置从 CSV 导入并生成经过校验的运行时资产；存档使用带版本号的原子 JSON；血量 UI 通过领域事件更新。
+联网前单机闭环已经完成：
 
-后续里程碑依次为玩家生命与存档职责收敛、分层 Utility AI、性能证据和独立的 Host 权威 NetworkArena。首个作品集版本明确不实现 Lua、完整 GAS、确定性帧同步、KCP 接入和通用构建框架。
+- `Core → Gameplay → Unity → Editor/Tests` 程序集依赖边界已经建立。
+- Bootstrap 与场景 Installer 显式装配配置和存档服务，不使用全局可变单例。
+- 玩家使用移动轴与动作轴两条正交状态机，状态转移延迟提交，Animator 由单一驱动器管理短过渡与连击衔接。
+- 玩家与怪物共享 `DamageRequest → DamageResult → HealthChanged` 战斗管线，六点生命配置可自动扩容血量图标。
+- 怪物 AI 按 `Perception → Blackboard → Utility Decision → Action` 分层，并提供只读 Inspector 与 Scene Gizmos。
+- CSV 自动导入为经过校验的只读配置资产；存档使用带版本号的原子 JSON。
+- 输入适配器只暴露连续快照和离散动作命令；暂停、存档与玩家快照职责已经分离。
+- 当前门禁为 51 项纯 C# 核心规格、17 项 Unity EditMode 测试和 3 项 PlayMode 运行态测试。
+
+首个作品集版本明确不实现 Lua、完整 GAS、确定性帧同步、KCP 接入、通用对象池或全量零 GC 框架。下一阶段只在独立 `NetworkArena` 场景中实现受控的 Host 权威状态同步。
 
 ## 架构文档
 
 - [目标架构说明](Docs/Architecture/TargetArchitecture.md)：解释应用、会话、场景和角色生命周期，以及命名、事件和状态机边界。
 - [架构基线验收指南](Docs/Acceptance/ArchitectureBaselineAcceptance.md)：逐步验证编译、场景自动装配、配置、战斗和 Git 状态。
 - [玩家正交状态机验收指南](Docs/Acceptance/PlayerStateRefactorAcceptance.md)：验证移动轴、动作轴、受击打断、复活与 GC 行为。
+- [联网前单机闭环验收指南](Docs/Acceptance/PreNetworkSinglePlayerAcceptance.md)：从编译、测试、场景、动画、AI、存档到轻量性能采样逐项验收当前版本。
 
 ## 本地质量门禁
 
@@ -25,6 +35,11 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\Tools\Tests\RunHumanReadab
 ```
 
 项目自有生产类型使用中文 XML 摘要说明职责、设计模式和设计原因。已确认的遗留控制器记录在 `Tools/DocumentationAuditExclusions.txt`，对应里程碑重构完成时必须同步移出白名单。
+
+在 Unity 内也可以直接使用：
+
+- `Odyssey/配置/导入并校验全部 CSV`
+- `Odyssey/测试/运行 EditMode 测试`
 
 ## 开发环境
 
@@ -40,7 +55,7 @@ Assets/_Project/
 ├─ Code/       程序集边界内的 Core、Gameplay、Unity 与 Editor 代码
 ├─ Content/    场景、Prefab、动画控制器与输入动作资产
 ├─ Data/       设计 CSV、运行时 Resources 数据库与 Unity 配置资产
-└─ Tests/      Unity EditMode 测试
+└─ Tests/      Unity EditMode 与 PlayMode 测试
 ```
 
 ## 第三方内容
