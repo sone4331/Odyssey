@@ -110,7 +110,8 @@ namespace Odyssey.Gameplay.AI
     /// </summary>
     public sealed class EnemyDecisionModel
     {
-        private const float RetreatHealthThreshold = 0.3f;
+        // 当前演示敌人默认只有 3 点生命；阈值略高于三分之一，保证剩余 1 点生命时撤退目标真实可达。
+        private const float RetreatHealthThreshold = 0.34f;
         private readonly UtilityGoalSelector<EnemyGoal, EnemyDecisionContext> _selector;
 
         public EnemyDecisionModel()

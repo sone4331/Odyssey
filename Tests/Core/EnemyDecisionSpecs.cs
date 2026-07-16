@@ -10,6 +10,7 @@ internal static class EnemyDecisionSpecs
         Spec.Run("目标进入攻击范围且冷却完成时选择攻击", ReadyTargetInRangeSelectsAttack);
         Spec.Run("目标位于追击范围时选择追击", TargetInChaseRangeSelectsChase);
         Spec.Run("低生命近距离时选择撤退", LowHealthAtCloseRangeSelectsRetreat);
+        Spec.Run("三点生命剩一点时能够进入撤退", OneOfThreeHealthSelectsRetreat);
         Spec.Run("没有有效目标时选择待机", MissingTargetSelectsIdle);
         Spec.Run("攻击冷却期间在近距离保持待机", CooldownAtCloseRangeSelectsIdle);
     }
@@ -64,6 +65,19 @@ internal static class EnemyDecisionSpecs
             attackReady: true));
 
         Spec.Equal(EnemyGoal.Idle, decision.Goal, "没有目标时未选择待机");
+    }
+
+    private static void OneOfThreeHealthSelectsRetreat()
+    {
+        var decision = CreateModel().Decide(new EnemyDecisionContext(
+            hasTarget: true,
+            distanceToTarget: 1f,
+            chaseRange: 10f,
+            attackRange: 2f,
+            healthRatio: 1f / 3f,
+            attackReady: true));
+
+        Spec.Equal(EnemyGoal.Retreat, decision.Goal, "默认三点生命敌人的撤退分支不可达");
     }
 
     private static void CooldownAtCloseRangeSelectsIdle()
