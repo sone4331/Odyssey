@@ -15,6 +15,7 @@ using Odyssey.Inputs;
 using UnityEngine;
 using UnityEngine.UI;
 using UnityEditor;
+using UnityEditor.Animations;
 
 namespace Odyssey.Tests
 {
@@ -163,6 +164,47 @@ namespace Odyssey.Tests
             Assert.That(data.DashForce, Is.EqualTo(22f));
             Assert.That(data.AttackDamage, Is.EqualTo(2));
             Assert.That(data.MaxHealth, Is.EqualTo(6));
+        }
+
+        [Test]
+        public void PlayerAnimator_ContainsRequiredStatesAndUsesShortAirTransitions()
+        {
+            const string path = "Assets/_Project/Content/Animations/Player/PlayerAnimator.controller";
+            var controller = AssetDatabase.LoadAssetAtPath<AnimatorController>(path);
+
+            Assert.That(controller, Is.Not.Null, "未找到玩家 Animator Controller");
+            var stateMachine = controller.layers[0].stateMachine;
+            var stateNames = new System.Collections.Generic.HashSet<string>();
+            foreach (var child in stateMachine.states)
+            {
+                stateNames.Add(child.state.name);
+            }
+
+            foreach (var required in new[]
+                     {
+                         "Locomotion", "EllenJumpGoesUp", "EllenJumpGoesDown",
+                         "EllenCombo_1", "EllenCombo_2", "EllenCombo_3", "EllenCombo_4",
+                         "EllenHitFront", "EllenDeath"
+                     })
+            {
+                Assert.That(stateNames.Contains(required), Is.True, $"Animator 缺少状态：{required}");
+            }
+
+            foreach (var child in stateMachine.states)
+            {
+                if (child.state.name != "Locomotion" &&
+                    child.state.name != "EllenJumpGoesUp" &&
+                    child.state.name != "EllenJumpGoesDown")
+                {
+                    continue;
+                }
+
+                foreach (var transition in child.state.transitions)
+                {
+                    Assert.That(transition.duration, Is.LessThanOrEqualTo(0.15f),
+                        $"{child.state.name} 的过渡时间过长，会造成跳跃动画迟滞");
+                }
+            }
         }
 
         [Test]

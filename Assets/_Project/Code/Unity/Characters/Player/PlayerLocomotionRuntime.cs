@@ -113,7 +113,7 @@ namespace Odyssey.Characters.Player
                 Player.Controller.Move(velocity * deltaTime);
 
                 var animationSpeed = input == Vector2.zero ? 0f : 1f;
-                Player.Animator.SetFloat("Speed", animationSpeed, 0.1f, deltaTime);
+                Player.Animation.SetLocomotionSpeed(animationSpeed, deltaTime);
                 if (direction != Vector3.zero)
                 {
                     Player.transform.forward = Vector3.Slerp(
@@ -172,9 +172,7 @@ namespace Odyssey.Characters.Player
                 _charging = false;
                 Player.CanAirJump = true;
                 Player.CanAirDash = true;
-                Player.Animator.SetBool("IsGrounded", true);
-                Player.Animator.ResetTrigger("Jump");
-                Player.Animator.ResetTrigger("Fall");
+                Player.Animation.PlayGrounded();
             }
 
             public override void Exit()
@@ -197,7 +195,7 @@ namespace Odyssey.Characters.Player
                         ? Player.ChargeJumpHeight
                         : Player.JumpHeight;
                     Player.VerticalVelocity = Mathf.Sqrt(-2f * Player.Gravity * jumpHeight);
-                    Player.Animator.SetTrigger("Jump");
+                    Player.Animation.PlayJump();
                     return StateTransition<PlayerLocomotionStateId>.To(PlayerLocomotionStateId.Airborne);
                 }
 
@@ -224,6 +222,7 @@ namespace Odyssey.Characters.Player
         private sealed class AirborneState : LocomotionState
         {
             private static readonly RaycastHit[] StompHits = new RaycastHit[8];
+            private bool _fallAnimationStarted;
 
             public AirborneState(PlayerLocomotionRuntime runtime) : base(runtime)
             {
@@ -231,8 +230,15 @@ namespace Odyssey.Characters.Player
 
             public override void Enter()
             {
-                Player.Animator.SetBool("IsGrounded", false);
-                Player.Animator.SetTrigger(Player.VerticalVelocity > 2f ? "Jump" : "Fall");
+                _fallAnimationStarted = Player.VerticalVelocity <= 0f;
+                if (_fallAnimationStarted)
+                {
+                    Player.Animation.PlayFall();
+                }
+                else
+                {
+                    Player.Animation.PlayJump();
+                }
             }
 
             public override void Exit()
@@ -247,7 +253,8 @@ namespace Odyssey.Characters.Player
                     input.UseJumpInput();
                     Player.CanAirJump = false;
                     Player.VerticalVelocity = Mathf.Sqrt(-2f * Player.Gravity * Player.AirJumpHeight);
-                    Player.Animator.SetTrigger("Jump");
+                    _fallAnimationStarted = false;
+                    Player.Animation.PlayJump();
                 }
 
                 if (Player.MovementEnabled)
@@ -258,12 +265,19 @@ namespace Odyssey.Characters.Player
                     Runtime.Momentum = Vector3.Lerp(Runtime.Momentum, Vector3.zero, deltaTime * 5f);
                 }
 
+                if (!_fallAnimationStarted && Player.VerticalVelocity <= 0f)
+                {
+                    _fallAnimationStarted = true;
+                    Player.Animation.PlayFall();
+                }
+
                 if (Player.MovementEnabled && Player.VerticalVelocity < 0f && TryStompEnemy())
                 {
                     Player.VerticalVelocity = 8f;
                     Player.CanAirJump = true;
                     Player.CanAirDash = true;
-                    Player.Animator.SetTrigger("Jump");
+                    _fallAnimationStarted = false;
+                    Player.Animation.PlayJump();
                     return StateTransition<PlayerLocomotionStateId>.None;
                 }
 
@@ -325,7 +339,7 @@ namespace Odyssey.Characters.Player
 
             public override void Enter()
             {
-                Player.Animator.SetTrigger("Fall");
+                Player.Animation.PlayFall();
                 if (Runtime.WallNormal != Vector3.zero)
                 {
                     Player.transform.forward = -Runtime.WallNormal;

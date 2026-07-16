@@ -213,15 +213,15 @@ namespace Odyssey.Characters.Player
                 _timer = 0f;
                 Player.VerticalVelocity = 0f;
                 Player.Controller.Move(Vector3.zero);
-                Player.Animator.SetFloat("Speed", 0f);
-                Player.Animator.SetInteger("ComboIndex", _comboIndex);
-                Player.Animator.SetTrigger("Attack");
+                Player.Animation.SetLocomotionSpeed(0f, 0f);
+                Player.Animation.PlayAttack(_comboIndex);
                 FaceCameraForward();
             }
 
             public override void Exit()
             {
                 Player.EndAbility(PlayerController.AttackAbilityId);
+                Player.Animation.Recover(Player.LocomotionState, Player.VerticalVelocity);
             }
 
             public override StateTransition<PlayerActionStateId> Tick(float deltaTime)
@@ -250,8 +250,7 @@ namespace Odyssey.Characters.Player
                     _comboQueued = false;
                     _damageApplied = false;
                     _timer = 0f;
-                    Player.Animator.SetInteger("ComboIndex", _comboIndex);
-                    Player.Animator.SetTrigger("Attack");
+                    Player.Animation.PlayAttack(_comboIndex);
                     return StateTransition<PlayerActionStateId>.None;
                 }
 
@@ -316,14 +315,13 @@ namespace Odyssey.Characters.Player
                     Player.CanAirDash = false;
                 }
 
-                Player.Animator.SetTrigger("Run");
-                Player.Animator.speed = 2.5f;
+                Player.Animation.PlayDash(Player.LocomotionState, Player.VerticalVelocity);
             }
 
             public override void Exit()
             {
                 Player.EndAbility(PlayerController.DashAbilityId);
-                Player.Animator.speed = 1f;
+                Player.Animation.Recover(Player.LocomotionState, Player.VerticalVelocity);
             }
 
             public override StateTransition<PlayerActionStateId> Tick(float deltaTime)
@@ -356,7 +354,7 @@ namespace Odyssey.Characters.Player
                 _knockback = Runtime._pendingKnockback;
                 ClearRequest();
                 _remaining = 0.5f;
-                Player.Animator.SetTrigger("Hit");
+                Player.Animation.PlayHit();
                 Player.CanAirJump = false;
                 Player.CanAirDash = false;
             }
@@ -364,6 +362,7 @@ namespace Odyssey.Characters.Player
             public override void Exit()
             {
                 Player.EndAbility(PlayerController.HitAbilityId);
+                Player.Animation.Recover(Player.LocomotionState, Player.VerticalVelocity);
             }
 
             public override StateTransition<PlayerActionStateId> Tick(float deltaTime)

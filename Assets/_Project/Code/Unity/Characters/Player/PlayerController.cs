@@ -78,6 +78,7 @@ namespace Odyssey.Characters.Player
 
         public CharacterController Controller { get; private set; }
         public Animator Animator { get; private set; }
+        internal PlayerAnimationDriver Animation { get; private set; }
         public Transform MainCameraTransform { get; private set; }
         public bool MovementEnabled { get; set; }
         public int MaxHealth => maxHealth;
@@ -94,6 +95,12 @@ namespace Odyssey.Characters.Player
         {
             Controller = GetComponent<CharacterController>();
             Animator = GetComponentInChildren<Animator>();
+            if (Animator == null)
+            {
+                throw new InvalidOperationException("玩家对象缺少 Animator，无法驱动角色表现。");
+            }
+
+            Animation = new PlayerAnimationDriver(Animator);
             var mainCamera = Camera.main;
             MainCameraTransform = mainCamera == null ? transform : mainCamera.transform;
             if (mainCamera == null)
@@ -186,7 +193,7 @@ namespace Odyssey.Characters.Player
             if (result.Killed)
             {
                 _isDead = true;
-                Animator.SetTrigger("Die");
+                Animation.PlayDeath();
                 StartCoroutine(RespawnRoutine());
                 return;
             }
@@ -376,7 +383,7 @@ namespace Odyssey.Characters.Player
             }
 
             Controller.enabled = true;
-            Animator.Play("Locomotion", 0, 0f);
+            Animation.PlayGrounded();
             _actions.Reset();
             _locomotion.Reset();
             enabled = true;
