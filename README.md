@@ -47,8 +47,4 @@ Assets/_Project/
 
 当前原型场景引用 Unity 3D Game Kit Lite。该资源包和 TextMesh Pro 示例资产不会随公开源码重新分发。打开 `Assets/_Project/Content/Scenes/Level_01.unity` 前，需要从合法来源导入对应的原始资源包。
 
-## 仓库公开策略
-
-本地“架构学习文档”目录包含对外部商业项目的学习笔记，因此不会进入公开作品集，也不会被描述为 Odyssey 的本人实现。
-
 仓库使用 `type(scope): 中文说明` 格式的 Conventional Commits。只有相关纯 C#、Unity、中文文案和文档审计全部通过后，完整模块才会推送到远端。
