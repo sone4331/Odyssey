@@ -27,6 +27,19 @@ namespace Odyssey.Core.FSM
         }
 
         /// <summary>
+        /// 强制结束当前状态并回到指定状态，用于复活、重新开局等明确的生命周期边界。
+        /// 采用显式 Reset 而不是重复调用 Initialize，保证旧状态的事件订阅和临时资源一定经过 Exit 清理。
+        /// </summary>
+        public void Reset(TStateId targetState)
+        {
+            var nextState = Resolve(targetState);
+            _currentState?.Exit();
+            CurrentId = targetState;
+            _currentState = nextState;
+            _currentState.Enter();
+        }
+
+        /// <summary>
         /// 先执行当前状态并保存转移意图，再由状态机统一完成 Exit、替换和 Enter。
         /// 转移阶段集中化是状态一致性的关键约束，状态实现不得绕过该顺序直接切换实例。
         /// </summary>

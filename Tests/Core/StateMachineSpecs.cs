@@ -14,6 +14,25 @@ internal static class StateMachineSpecs
     {
         Spec.Run("Tick 返回后提交状态转移", TransitionIsCommittedAfterTickReturns);
         Spec.Run("自转移不会重新进入状态", SelfTransitionDoesNotReenterState);
+        Spec.Run("重置状态机会完整退出旧状态并进入目标状态", ResetExitsOldStateAndEntersTargetState);
+    }
+
+    private static void ResetExitsOldStateAndEntersTargetState()
+    {
+        var idle = new RecordingState();
+        var moving = new RecordingState();
+        var machine = new DeferredStateMachine<StateId>(new Dictionary<StateId, IState<StateId>>
+        {
+            [StateId.Idle] = idle,
+            [StateId.Moving] = moving
+        });
+
+        machine.Initialize(StateId.Idle);
+        machine.Reset(StateId.Moving);
+
+        Spec.Equal(StateId.Moving, machine.CurrentId, "重置后状态 ID 不正确");
+        Spec.Equal(1, idle.ExitCount, "重置时没有退出旧状态");
+        Spec.Equal(1, moving.EnterCount, "重置时没有进入目标状态");
     }
 
     private static void SelfTransitionDoesNotReenterState()

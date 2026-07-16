@@ -1,17 +1,4 @@
 # 这些遗留文件将在对应架构重构阶段拆分并移出白名单，避免为即将删除的结构重复补注释。
 Assets/_Project/Code/Unity/Characters/Enemies/Enemy.cs
-Assets/_Project/Code/Unity/Characters/Player/PlayerAirState.cs
-Assets/_Project/Code/Unity/Characters/Player/PlayerAttackState.cs
-Assets/_Project/Code/Unity/Characters/Player/PlayerController.cs
-Assets/_Project/Code/Unity/Characters/Player/PlayerDashState.cs
-Assets/_Project/Code/Unity/Characters/Player/PlayerGroundedState.cs
-Assets/_Project/Code/Unity/Characters/Player/PlayerHitState.cs
-Assets/_Project/Code/Unity/Characters/Player/PlayerIdleState.cs
-Assets/_Project/Code/Unity/Characters/Player/PlayerJumpState.cs
-Assets/_Project/Code/Unity/Characters/Player/PlayerMoveState.cs
-Assets/_Project/Code/Unity/Characters/Player/PlayerState.cs
-Assets/_Project/Code/Unity/Characters/Player/PlayerWallSlideState.cs
-Assets/_Project/Code/Unity/Legacy/FSM/BaseState.cs
-Assets/_Project/Code/Unity/Legacy/FSM/StateMachine.cs
 Assets/_Project/Code/Unity/Input/InputReader.cs
 Assets/_Project/Code/Unity/Input/Generated/GameInput.cs

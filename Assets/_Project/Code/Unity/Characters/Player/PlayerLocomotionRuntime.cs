@@ -1,0 +1,375 @@
+using System;
+using System.Collections.Generic;
+using Odyssey.Core.FSM;
+using Odyssey.Gameplay.Characters;
+using Odyssey.Characters.Enemies;
+using UnityEngine;
+
+namespace Odyssey.Characters.Player
+{
+    /// <summary>
+    /// 玩家移动轴的 Unity 适配器，负责把 CharacterController、输入和物理感知转换为可测试的状态机事实。
+    /// 采用组合模式持有 Grounded、Airborne、WallSlide 三个缓存状态，并使用延迟提交 FSM 防止状态切换后旧逻辑继续执行。
+    /// 这样攻击、冲刺和受击可以由另一条动作轴独立运行，不再制造 IdleAttack、AirDash 等组合状态。
+    /// </summary>
+    internal sealed class PlayerLocomotionRuntime
+    {
+        private readonly PlayerController _player;
+        private readonly DeferredStateMachine<PlayerLocomotionStateId> _machine;
+        private readonly GroundedState _groundedState;
+        private readonly AirborneState _airborneState;
+        private readonly WallSlideState _wallSlideState;
+
+        public PlayerLocomotionRuntime(PlayerController player)
+        {
+            _player = player ?? throw new ArgumentNullException(nameof(player));
+            _groundedState = new GroundedState(this);
+            _airborneState = new AirborneState(this);
+            _wallSlideState = new WallSlideState(this);
+            _machine = new DeferredStateMachine<PlayerLocomotionStateId>(
+                new Dictionary<PlayerLocomotionStateId, IState<PlayerLocomotionStateId>>
+                {
+                    [PlayerLocomotionStateId.Grounded] = _groundedState,
+                    [PlayerLocomotionStateId.Airborne] = _airborneState,
+                    [PlayerLocomotionStateId.WallSlide] = _wallSlideState
+                });
+        }
+
+        public PlayerLocomotionStateId CurrentStateId => _machine.CurrentId;
+        public Vector3 WallNormal { get; set; }
+        public Vector3 Momentum { get; set; }
+
+        /// <summary>
+        /// 进入初始地面状态。初始化只执行一次，复活应调用 Reset，避免重复装配导致事件和计时器残留。
+        /// </summary>
+        public void Initialize()
+        {
+            _machine.Initialize(PlayerLocomotionStateId.Grounded);
+        }
+
+        /// <summary>
+        /// 驱动移动轴；动作轴阻塞移动时仍更新感知和状态，但不重复应用水平位移。
+        /// 采用“感知、决策、表现”顺序，让状态迁移在本帧末提交，保证每帧只有一个状态负责移动。
+        /// </summary>
+        public void Tick(float deltaTime, bool movementEnabled)
+        {
+            _player.MovementEnabled = movementEnabled;
+            _machine.Tick(deltaTime);
+        }
+
+        /// <summary>
+        /// 复活时清理移动轴的临时动量和旧状态生命周期，再从地面状态开始。
+        /// </summary>
+        public void Reset()
+        {
+            Momentum = Vector3.zero;
+            WallNormal = Vector3.zero;
+            _machine.Reset(PlayerLocomotionStateId.Grounded);
+        }
+
+        private abstract class LocomotionState : IState<PlayerLocomotionStateId>
+        {
+            protected LocomotionState(PlayerLocomotionRuntime runtime)
+            {
+                Runtime = runtime;
+            }
+
+            protected PlayerLocomotionRuntime Runtime { get; }
+            protected PlayerController Player => Runtime._player;
+
+            public abstract void Enter();
+            public abstract void Exit();
+            public abstract StateTransition<PlayerLocomotionStateId> Tick(float deltaTime);
+
+            protected Vector3 ReadCameraDirection(Vector2 input)
+            {
+                var camera = Player.MainCameraTransform;
+                var forward = camera == null ? Vector3.forward : camera.forward;
+                var right = camera == null ? Vector3.right : camera.right;
+                forward.y = 0f;
+                right.y = 0f;
+                forward.Normalize();
+                right.Normalize();
+                return forward * input.y + right * input.x;
+            }
+
+            protected void ApplyGroundMovement(
+                float deltaTime,
+                float speedMultiplier = 1f,
+                Vector3 additionalVelocity = default)
+            {
+                if (!Player.MovementEnabled)
+                {
+                    return;
+                }
+
+                var input = Player.InputReader == null ? Vector2.zero : Player.InputReader.MovementValue;
+                var direction = ReadCameraDirection(input);
+                var speed = (Player.InputReader != null && Player.InputReader.IsSprinting
+                    ? Player.RunSpeed
+                    : Player.WalkSpeed) * speedMultiplier;
+                var velocity = direction * speed + additionalVelocity;
+                velocity.y = Player.VerticalVelocity;
+                Player.Controller.Move(velocity * deltaTime);
+
+                var animationSpeed = input == Vector2.zero ? 0f : 1f;
+                Player.Animator.SetFloat("Speed", animationSpeed, 0.1f, deltaTime);
+                if (direction != Vector3.zero)
+                {
+                    Player.transform.forward = Vector3.Slerp(
+                        Player.transform.forward,
+                        direction,
+                        deltaTime * 10f);
+                }
+            }
+
+            protected bool TryFindWall(out RaycastHit hit)
+            {
+                var start = Player.transform.position + Vector3.up;
+                Debug.DrawRay(start, Player.transform.forward, Color.yellow);
+                return Physics.Raycast(
+                    start,
+                    Player.transform.forward,
+                    out hit,
+                    1f,
+                    Player.WallLayer,
+                    QueryTriggerInteraction.Ignore);
+            }
+
+            protected bool IsWallNormalUsable(Vector3 normal)
+            {
+                var angle = Vector3.Angle(Vector3.up, normal);
+                return angle > 70f && angle < 110f;
+            }
+
+            protected StateTransition<PlayerLocomotionStateId> TransitionIfNeeded(
+                PlayerLocomotionObservation observation)
+            {
+                var next = PlayerLocomotionTransitionPolicy.SelectNext(
+                    Runtime.CurrentStateId,
+                    observation);
+                return next == Runtime.CurrentStateId
+                    ? StateTransition<PlayerLocomotionStateId>.None
+                    : StateTransition<PlayerLocomotionStateId>.To(next);
+            }
+        }
+
+        private sealed class GroundedState : LocomotionState
+        {
+            private float _groundGraceTimer;
+            private float _chargeTimer;
+            private bool _charging;
+
+            public GroundedState(PlayerLocomotionRuntime runtime) : base(runtime)
+            {
+            }
+
+            public override void Enter()
+            {
+                Player.VerticalVelocity = -5f;
+                _groundGraceTimer = 0.2f;
+                _chargeTimer = 0f;
+                _charging = false;
+                Player.CanAirJump = true;
+                Player.CanAirDash = true;
+                Player.Animator.SetBool("IsGrounded", true);
+                Player.Animator.ResetTrigger("Jump");
+                Player.Animator.ResetTrigger("Fall");
+            }
+
+            public override void Exit()
+            {
+                _charging = false;
+            }
+
+            public override StateTransition<PlayerLocomotionStateId> Tick(float deltaTime)
+            {
+                var input = Player.InputReader;
+                if (input != null && input.IsJumpKeyPressed)
+                {
+                    _charging = true;
+                    _chargeTimer += deltaTime;
+                }
+                else if (_charging)
+                {
+                    _charging = false;
+                    var jumpHeight = _chargeTimer >= Player.MinChargeTime
+                        ? Player.ChargeJumpHeight
+                        : Player.JumpHeight;
+                    Player.VerticalVelocity = Mathf.Sqrt(-2f * Player.Gravity * jumpHeight);
+                    Player.Animator.SetTrigger("Jump");
+                    return StateTransition<PlayerLocomotionStateId>.To(PlayerLocomotionStateId.Airborne);
+                }
+
+                if (!Player.Controller.isGrounded)
+                {
+                    _groundGraceTimer -= deltaTime;
+                    Player.VerticalVelocity += Player.Gravity * deltaTime;
+                    if (_groundGraceTimer <= 0f)
+                    {
+                        return StateTransition<PlayerLocomotionStateId>.To(PlayerLocomotionStateId.Airborne);
+                    }
+                }
+                else
+                {
+                    _groundGraceTimer = 0.2f;
+                    Player.VerticalVelocity = -10f;
+                }
+
+                ApplyGroundMovement(deltaTime);
+                return StateTransition<PlayerLocomotionStateId>.None;
+            }
+        }
+
+        private sealed class AirborneState : LocomotionState
+        {
+            private static readonly RaycastHit[] StompHits = new RaycastHit[8];
+
+            public AirborneState(PlayerLocomotionRuntime runtime) : base(runtime)
+            {
+            }
+
+            public override void Enter()
+            {
+                Player.Animator.SetBool("IsGrounded", false);
+                Player.Animator.SetTrigger(Player.VerticalVelocity > 2f ? "Jump" : "Fall");
+            }
+
+            public override void Exit()
+            {
+            }
+
+            public override StateTransition<PlayerLocomotionStateId> Tick(float deltaTime)
+            {
+                var input = Player.InputReader;
+                if (input != null && input.IsJumpKeyPressed && Player.CanAirJump)
+                {
+                    input.UseJumpInput();
+                    Player.CanAirJump = false;
+                    Player.VerticalVelocity = Mathf.Sqrt(-2f * Player.Gravity * Player.AirJumpHeight);
+                    Player.Animator.SetTrigger("Jump");
+                }
+
+                if (Player.MovementEnabled)
+                {
+                    Player.VerticalVelocity = Mathf.Max(
+                        Player.VerticalVelocity + Player.Gravity * deltaTime,
+                        -20f);
+                    Runtime.Momentum = Vector3.Lerp(Runtime.Momentum, Vector3.zero, deltaTime * 5f);
+                }
+
+                if (Player.MovementEnabled && Player.VerticalVelocity < 0f && TryStompEnemy())
+                {
+                    Player.VerticalVelocity = 8f;
+                    Player.CanAirJump = true;
+                    Player.CanAirDash = true;
+                    Player.Animator.SetTrigger("Jump");
+                    return StateTransition<PlayerLocomotionStateId>.None;
+                }
+
+                var touchingWall = false;
+                if (Player.VerticalVelocity < 0f && TryFindWall(out var wallHit) && IsWallNormalUsable(wallHit.normal))
+                {
+                    touchingWall = true;
+                    Runtime.WallNormal = wallHit.normal;
+                }
+
+                if (Player.MovementEnabled)
+                {
+                    ApplyGroundMovement(deltaTime, 0.7f, Runtime.Momentum);
+                }
+
+                var observation = new PlayerLocomotionObservation(
+                    Player.Controller.isGrounded && Player.VerticalVelocity < -2f,
+                    touchingWall,
+                    Player.VerticalVelocity < 0f,
+                    false);
+                var transition = TransitionIfNeeded(observation);
+                return transition;
+            }
+
+            private bool TryStompEnemy()
+            {
+                var origin = Player.transform.position + Vector3.up * 0.1f;
+                var count = Physics.SphereCastNonAlloc(
+                    origin,
+                    0.2f,
+                    Vector3.down,
+                    StompHits,
+                    0.2f,
+                    Player.EnemyLayer,
+                    QueryTriggerInteraction.Ignore);
+                for (var i = 0; i < count; i++)
+                {
+                    var enemy = StompHits[i].collider == null
+                        ? null
+                        : StompHits[i].collider.GetComponentInParent<Enemy>();
+                    if (enemy == null)
+                    {
+                        continue;
+                    }
+
+                    enemy.TakeDamage(Player.AttackDamage);
+                    return true;
+                }
+
+                return false;
+            }
+        }
+
+        private sealed class WallSlideState : LocomotionState
+        {
+            public WallSlideState(PlayerLocomotionRuntime runtime) : base(runtime)
+            {
+            }
+
+            public override void Enter()
+            {
+                Player.Animator.SetTrigger("Fall");
+                if (Runtime.WallNormal != Vector3.zero)
+                {
+                    Player.transform.forward = -Runtime.WallNormal;
+                }
+            }
+
+            public override void Exit()
+            {
+            }
+
+            public override StateTransition<PlayerLocomotionStateId> Tick(float deltaTime)
+            {
+                var input = Player.InputReader;
+                var jumpRequested = input != null && input.IsJumpKeyPressed;
+                if (jumpRequested)
+                {
+                    input.UseJumpInput();
+                    Player.CanAirJump = true;
+                    Player.CanAirDash = true;
+                    Runtime.Momentum = Runtime.WallNormal * Player.WallJumpSideForce;
+                    Player.VerticalVelocity = Player.WallJumpUpForce;
+                    Player.transform.forward = Runtime.WallNormal;
+                    return StateTransition<PlayerLocomotionStateId>.To(PlayerLocomotionStateId.Airborne);
+                }
+
+                var touchingWall = TryFindWall(out var hit) && IsWallNormalUsable(hit.normal);
+                if (touchingWall)
+                {
+                    Runtime.WallNormal = hit.normal;
+                }
+
+                Player.VerticalVelocity = Player.WallSlideSpeed;
+                if (Player.MovementEnabled)
+                {
+                    Player.Controller.Move((Vector3.up * Player.VerticalVelocity + Player.transform.forward * 0.5f) * deltaTime);
+                }
+
+                var observation = new PlayerLocomotionObservation(
+                    Player.Controller.isGrounded,
+                    touchingWall,
+                    true,
+                    jumpRequested);
+                return TransitionIfNeeded(observation);
+            }
+        }
+    }
+}

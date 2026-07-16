@@ -46,7 +46,7 @@ Odyssey.Unity
 Odyssey.Editor / Tests
 ```
 
-- Core 保存状态机、Tag、Ability 和事件总线等不依赖 Unity 的机制。
+- Core 保存状态机、Tag 和 Ability 等不依赖 Unity 的机制。
 - Gameplay 保存战斗、角色、AI、配置与存档规则。
 - Unity 只负责 Input System、CharacterController、Animator、NavMesh、UI 和网络适配。
 - Bootstrap 与 Installer 是 Composition Root；业务对象不得自行查找全局服务。
@@ -59,9 +59,7 @@ Odyssey.Editor / Tests
 
 ## 玩家状态边界
 
-旧玩家状态机在状态 `Tick` 内立即调用 `ChangeState`，因此父状态切换后子状态仍可能继续执行本帧逻辑。当前 `PlayerIdleState` 和 `PlayerMoveState` 中的实例检查正是为规避该问题而存在。
-
-目标设计拆成三个正交维度：
+玩家控制链已经拆成三个正交维度：
 
 ```text
 角色生命周期：Alive / Dead / Respawning
@@ -69,12 +67,14 @@ Locomotion：Grounded / Airborne / WallSlide
 Ability：Attack / Dash / HitReaction
 ```
 
-Locomotion 使用延迟提交 FSM：状态只返回转移意图，状态机在 `Tick` 返回后统一执行 Exit、替换和 Enter。Idle 与 Move 由 Grounded 状态内的速度和动画混合树表达，不再作为独立状态。Attack、Dash 和 HitReaction 由 AbilitySystem 与 Gameplay Tag 表达，不再挤占移动状态。
+Locomotion 使用延迟提交 FSM：状态只返回转移意图，状态机在 `Tick` 返回后统一执行 Exit、替换和 Enter。Idle 与 Move 由 Grounded 状态内的速度和动画混合树表达，不再作为独立状态。Attack、Dash 和 HitReaction 使用独立动作轴，并由 AbilitySystem 与 Gameplay Tag 校验冷却和打断，不再挤占移动状态。
+
+`PlayerController` 是角色级组合根与兼容门面；`PlayerLocomotionRuntime` 和 `PlayerActionRuntime` 是每个玩家实例独享的运行时对象，不是全局 Manager 或单例。所有状态在构造时缓存复用，攻击命中使用 NonAlloc 查询缓冲区，避免主循环因状态切换和物理查询持续产生托管分配。
 
 ## 渐进迁移约束
 
 1. 每个模块先增加失败规格，再实现最小行为。
-2. Legacy FSM 在新玩家控制链完成行为对照前保留。
+2. 已迁移模块必须删除旧实现和审计白名单，禁止长期保留双写路径。
 3. 新旧系统不得同时写入同一份角色状态。
 4. 每个模块通过纯 C#、Unity、中文和注释门禁后独立提交并推送。
 5. 运行时调试面板必须能显示状态、Ability、领域事件和网络验证结果，让架构可以在演示视频中被观察。
