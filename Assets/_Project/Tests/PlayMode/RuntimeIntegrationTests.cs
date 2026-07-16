@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Reflection;
 using NUnit.Framework;
 using Odyssey.Characters.Enemies;
 using Odyssey.Characters.Player;
@@ -81,6 +82,59 @@ namespace Odyssey.Tests.PlayMode
         }
 
         [UnityTest]
+        public IEnumerator PlayerAnimator_DrivesAttackHitAndRecoveryWithoutTransitions()
+        {
+            var player = Object.FindFirstObjectByType<PlayerController>();
+            Assert.That(player, Is.Not.Null, "场景中未找到玩家");
+
+            var attackMethod = typeof(PlayerController).GetMethod(
+                "HandleAttackRequested",
+                BindingFlags.Instance | BindingFlags.NonPublic);
+            Assert.That(attackMethod, Is.Not.Null, "未找到玩家攻击命令入口");
+
+            attackMethod.Invoke(player, null);
+            yield return null;
+            yield return new WaitForFixedUpdate();
+            Assert.That(player.ActionState, Is.EqualTo(Odyssey.Gameplay.Characters.PlayerActionStateId.Attack));
+            AssertAnimatorState(player.Animator, "EllenCombo_1");
+
+            player.TakeDamage(1, player.transform.position - player.transform.forward);
+            yield return null;
+            yield return new WaitForFixedUpdate();
+            Assert.That(player.ActionState, Is.EqualTo(Odyssey.Gameplay.Characters.PlayerActionStateId.Hit));
+            AssertAnimatorState(player.Animator, "EllenHitFront");
+
+            yield return new WaitForSeconds(0.6f);
+            Assert.That(player.ActionState, Is.EqualTo(Odyssey.Gameplay.Characters.PlayerActionStateId.Free));
+            AssertAnimatorState(player.Animator, "Locomotion");
+        }
+
+        [UnityTest]
+        public IEnumerator PlayerAnimator_DrivesJumpApexAndFallWithoutTransitions()
+        {
+            var player = Object.FindFirstObjectByType<PlayerController>();
+            Assert.That(player, Is.Not.Null, "场景中未找到玩家");
+            Assert.That(player.InputReader, Is.Not.Null, "玩家缺少输入适配器");
+
+            SetJumpPressed(player, true);
+            yield return new WaitForSeconds(0.1f);
+            SetJumpPressed(player, false);
+            yield return null;
+            yield return new WaitForFixedUpdate();
+
+            Assert.That(player.LocomotionState,
+                Is.EqualTo(Odyssey.Gameplay.Characters.PlayerLocomotionStateId.Airborne));
+            AssertAnimatorState(player.Animator, "EllenJumpGoesUp");
+
+            player.VerticalVelocity = -1f;
+            yield return null;
+            yield return new WaitForFixedUpdate();
+            AssertAnimatorState(player.Animator, "EllenJumpGoesDown");
+
+            SetJumpPressed(player, false);
+        }
+
+        [UnityTest]
         public IEnumerator EnemyRuntime_TransitionsThroughChaseAttackAndRetreat()
         {
             var player = Object.FindFirstObjectByType<PlayerController>();
@@ -105,6 +159,29 @@ namespace Odyssey.Tests.PlayMode
 
             Object.Destroy(root);
             yield return null;
+        }
+
+        /// <summary>
+        /// 接受当前状态或正在交叉淡化的下一状态，验证代码驱动目标已经提交给 Animator。
+        /// </summary>
+        private static void AssertAnimatorState(Animator animator, string expectedState)
+        {
+            var expectedHash = Animator.StringToHash(expectedState);
+            var current = animator.GetCurrentAnimatorStateInfo(0);
+            var next = animator.GetNextAnimatorStateInfo(0);
+            Assert.That(
+                current.shortNameHash == expectedHash || next.shortNameHash == expectedHash,
+                Is.True,
+                $"Animator 未进入或过渡到状态：{expectedState}");
+        }
+
+        private static void SetJumpPressed(PlayerController player, bool pressed)
+        {
+            var field = player.InputReader.GetType().GetField(
+                "<IsJumpPressed>k__BackingField",
+                BindingFlags.Instance | BindingFlags.NonPublic);
+            Assert.That(field, Is.Not.Null, "输入适配器的跳跃快照字段不存在");
+            field.SetValue(player.InputReader, pressed);
         }
     }
 }

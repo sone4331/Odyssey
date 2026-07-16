@@ -195,13 +195,20 @@ namespace Odyssey.Tests
         }
 
         [Test]
-        public void PlayerAnimator_ContainsRequiredStatesAndUsesShortAirTransitions()
+        public void PlayerAnimator_ContainsOnlyCodeDrivenStatesAndSpeedParameter()
         {
             const string path = "Assets/_Project/Content/Animations/Player/PlayerAnimator.controller";
             var controller = AssetDatabase.LoadAssetAtPath<AnimatorController>(path);
 
             Assert.That(controller, Is.Not.Null, "未找到玩家 Animator Controller");
+            Assert.That(controller.parameters.Length, Is.EqualTo(1),
+                "代码驱动动画不应继续保留旧 Trigger、Bool 或连击参数");
+            Assert.That(controller.parameters[0].name, Is.EqualTo("Speed"));
+            Assert.That(controller.parameters[0].type, Is.EqualTo(AnimatorControllerParameterType.Float));
+
             var stateMachine = controller.layers[0].stateMachine;
+            Assert.That(stateMachine.anyStateTransitions, Is.Empty,
+                "代码直接 CrossFade 后不应保留 Any State 条件过渡");
             var stateNames = new System.Collections.Generic.HashSet<string>();
             foreach (var child in stateMachine.states)
             {
@@ -220,18 +227,8 @@ namespace Odyssey.Tests
 
             foreach (var child in stateMachine.states)
             {
-                if (child.state.name != "Locomotion" &&
-                    child.state.name != "EllenJumpGoesUp" &&
-                    child.state.name != "EllenJumpGoesDown")
-                {
-                    continue;
-                }
-
-                foreach (var transition in child.state.transitions)
-                {
-                    Assert.That(transition.duration, Is.LessThanOrEqualTo(0.15f),
-                        $"{child.state.name} 的过渡时间过长，会造成跳跃动画迟滞");
-                }
+                Assert.That(child.state.transitions, Is.Empty,
+                    $"状态 {child.state.name} 仍保留与代码驱动重复的旧过渡");
             }
         }
 

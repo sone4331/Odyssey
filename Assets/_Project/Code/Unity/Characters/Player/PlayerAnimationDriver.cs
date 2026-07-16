@@ -15,18 +15,17 @@ namespace Odyssey.Characters.Player
         private const float ActionBlendTime = 0.08f;
 
         private static readonly int Speed = Animator.StringToHash("Speed");
-        private static readonly int IsGrounded = Animator.StringToHash("IsGrounded");
-        private static readonly int Locomotion = Animator.StringToHash("Locomotion");
-        private static readonly int JumpUp = Animator.StringToHash("EllenJumpGoesUp");
-        private static readonly int JumpDown = Animator.StringToHash("EllenJumpGoesDown");
-        private static readonly int Hit = Animator.StringToHash("EllenHitFront");
-        private static readonly int Death = Animator.StringToHash("EllenDeath");
-        private static readonly int[] ComboStates =
+        private static readonly AnimatorStateId Locomotion = CreateStateId("Locomotion");
+        private static readonly AnimatorStateId JumpUp = CreateStateId("EllenJumpGoesUp");
+        private static readonly AnimatorStateId JumpDown = CreateStateId("EllenJumpGoesDown");
+        private static readonly AnimatorStateId Hit = CreateStateId("EllenHitFront");
+        private static readonly AnimatorStateId Death = CreateStateId("EllenDeath");
+        private static readonly AnimatorStateId[] ComboStates =
         {
-            Animator.StringToHash("EllenCombo_1"),
-            Animator.StringToHash("EllenCombo_2"),
-            Animator.StringToHash("EllenCombo_3"),
-            Animator.StringToHash("EllenCombo_4")
+            CreateStateId("EllenCombo_1"),
+            CreateStateId("EllenCombo_2"),
+            CreateStateId("EllenCombo_3"),
+            CreateStateId("EllenCombo_4")
         };
 
         private readonly Animator _animator;
@@ -53,19 +52,16 @@ namespace Odyssey.Characters.Player
 
         public void PlayGrounded()
         {
-            _animator.SetBool(IsGrounded, true);
             CrossFadeIfNeeded(Locomotion, LocomotionBlendTime);
         }
 
         public void PlayJump()
         {
-            _animator.SetBool(IsGrounded, false);
             CrossFadeIfNeeded(JumpUp, AirBlendTime);
         }
 
         public void PlayFall()
         {
-            _animator.SetBool(IsGrounded, false);
             CrossFadeIfNeeded(JumpDown, AirBlendTime);
         }
 
@@ -75,7 +71,7 @@ namespace Odyssey.Characters.Player
         public void PlayAttack(int comboIndex)
         {
             var index = Mathf.Clamp(comboIndex, 1, ComboStates.Length) - 1;
-            _animator.CrossFadeInFixedTime(ComboStates[index], ActionBlendTime, 0, 0f);
+            _animator.CrossFadeInFixedTime(ComboStates[index].FullPathHash, ActionBlendTime, 0, 0f);
         }
 
         public void PlayDash(PlayerLocomotionStateId locomotionState, float verticalVelocity)
@@ -99,12 +95,12 @@ namespace Odyssey.Characters.Player
 
         public void PlayHit()
         {
-            _animator.CrossFadeInFixedTime(Hit, ActionBlendTime, 0, 0f);
+            _animator.CrossFadeInFixedTime(Hit.FullPathHash, ActionBlendTime, 0, 0f);
         }
 
         public void PlayDeath()
         {
-            _animator.CrossFadeInFixedTime(Death, ActionBlendTime, 0, 0f);
+            _animator.CrossFadeInFixedTime(Death.FullPathHash, ActionBlendTime, 0, 0f);
         }
 
         /// <summary>
@@ -134,17 +130,39 @@ namespace Odyssey.Characters.Player
             }
         }
 
-        private void CrossFadeIfNeeded(int targetState, float duration)
+        private void CrossFadeIfNeeded(AnimatorStateId targetState, float duration)
         {
             var current = _animator.GetCurrentAnimatorStateInfo(0);
             var next = _animator.GetNextAnimatorStateInfo(0);
-            if (current.shortNameHash == targetState ||
-                (_animator.IsInTransition(0) && next.shortNameHash == targetState))
+            if (current.shortNameHash == targetState.ShortNameHash ||
+                (_animator.IsInTransition(0) && next.shortNameHash == targetState.ShortNameHash))
             {
                 return;
             }
 
-            _animator.CrossFadeInFixedTime(targetState, duration, 0);
+            _animator.CrossFadeInFixedTime(targetState.FullPathHash, duration, 0);
+        }
+
+        private static AnimatorStateId CreateStateId(string stateName)
+        {
+            return new AnimatorStateId(
+                Animator.StringToHash($"Base Layer.{stateName}"),
+                Animator.StringToHash(stateName));
+        }
+
+        /// <summary>
+        /// 同时保存播放所需的完整路径哈希和运行态判断所需的短名称哈希，避免两类 Animator API 混用。
+        /// </summary>
+        private readonly struct AnimatorStateId
+        {
+            public AnimatorStateId(int fullPathHash, int shortNameHash)
+            {
+                FullPathHash = fullPathHash;
+                ShortNameHash = shortNameHash;
+            }
+
+            public int FullPathHash { get; }
+            public int ShortNameHash { get; }
         }
     }
 }
