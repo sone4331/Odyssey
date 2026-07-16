@@ -183,7 +183,7 @@ namespace Odyssey.Characters.Player
             public override StateTransition<PlayerLocomotionStateId> Tick(float deltaTime)
             {
                 var input = Player.InputReader;
-                if (input != null && input.IsJumpKeyPressed)
+                if (input != null && input.IsJumpPressed)
                 {
                     _charging = true;
                     _chargeTimer += deltaTime;
@@ -248,9 +248,9 @@ namespace Odyssey.Characters.Player
             public override StateTransition<PlayerLocomotionStateId> Tick(float deltaTime)
             {
                 var input = Player.InputReader;
-                if (input != null && input.IsJumpKeyPressed && Player.CanAirJump)
+                if (input != null && input.IsJumpPressed && Player.CanAirJump)
                 {
-                    input.UseJumpInput();
+                    input.ConsumeJump();
                     Player.CanAirJump = false;
                     Player.VerticalVelocity = Mathf.Sqrt(-2f * Player.Gravity * Player.AirJumpHeight);
                     _fallAnimationStarted = false;
@@ -353,10 +353,10 @@ namespace Odyssey.Characters.Player
             public override StateTransition<PlayerLocomotionStateId> Tick(float deltaTime)
             {
                 var input = Player.InputReader;
-                var jumpRequested = input != null && input.IsJumpKeyPressed;
+                var jumpRequested = input != null && input.IsJumpPressed;
                 if (jumpRequested)
                 {
-                    input.UseJumpInput();
+                    input.ConsumeJump();
                     Player.CanAirJump = true;
                     Player.CanAirDash = true;
                     Runtime.Momentum = Runtime.WallNormal * Player.WallJumpSideForce;

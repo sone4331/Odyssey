@@ -1,96 +1,94 @@
+using System;
 using UnityEngine;
-using UnityEngine.Events;
 using UnityEngine.InputSystem;
-using Odyssey.Inputs; // 引用刚才生成的代码
 
-[CreateAssetMenu(fileName = "InputReader", menuName = "Odyssey/输入/输入读取器")]
-public class InputReader : ScriptableObject, GameInput.IGameplayActions
+namespace Odyssey.Inputs
 {
-    // 定义事件：当移动/跳跃发生时，通知其他人
-    public event UnityAction<Vector2> MoveEvent;
-    public event UnityAction JumpEvent;
-    public event UnityAction JumpCanceledEvent;
-    public event UnityAction AttackEvent;
-    public event UnityAction DashEvent; // 定义“冲刺”闹钟
-    public bool IsSprinting { get; private set; } // 定义“加速跑”状态
-    
-    public Vector2 MovementValue { get; private set; }
-
-    private GameInput _gameInput;
-    
-    public bool IsJumpKeyPressed { get; private set; }
-
-    private void OnEnable()
+    /// <summary>
+    /// 把 Input System 回调转换为玩法层可读取的连续输入快照与离散动作命令。
+    /// 采用 Adapter 与 Observer 模式：移动、跳跃和奔跑保存当前状态，攻击与冲刺通过事件通知玩家门面，
+    /// 从而让角色状态机不依赖 InputAction 生命周期，也不在每帧重复订阅或查询设备。
+    /// </summary>
+    [CreateAssetMenu(fileName = "InputReader", menuName = "Odyssey/输入/输入读取器")]
+    public sealed class InputReader : ScriptableObject, GameInput.IGameplayActions
     {
-        if (_gameInput == null)
+        private GameInput _gameInput;
+
+        public event Action AttackRequested;
+        public event Action DashRequested;
+
+        public Vector2 MovementValue { get; private set; }
+        public bool IsJumpPressed { get; private set; }
+        public bool IsSprinting { get; private set; }
+
+        private void OnEnable()
         {
-            _gameInput = new GameInput();
-            _gameInput.Gameplay.SetCallbacks(this); // 告诉Input System把消息发给我
+            _gameInput ??= new GameInput();
+            _gameInput.Gameplay.SetCallbacks(this);
+            _gameInput.Gameplay.Enable();
         }
-        _gameInput.Gameplay.Enable();
-    }
 
-    private void OnDisable()
-    {
-        _gameInput.Gameplay.Disable();
-    }
+        private void OnDisable()
+        {
+            _gameInput?.Gameplay.Disable();
+            ResetSnapshot();
+        }
 
-    // --- 下面是接口实现 ---
-    public void OnMove(InputAction.CallbackContext context)
-    {
-        MovementValue = context.ReadValue<Vector2>(); // 存下来，供 State 随时查询
-        MoveEvent?.Invoke(MovementValue); // 同时也广播出去
-    }
+        public void OnMove(InputAction.CallbackContext context)
+        {
+            MovementValue = context.ReadValue<Vector2>();
+        }
 
-    public void OnJump(InputAction.CallbackContext context)
-    {
-        if (context.phase == InputActionPhase.Performed)
+        public void OnJump(InputAction.CallbackContext context)
         {
-            IsJumpKeyPressed = true; // 按下
-            JumpEvent?.Invoke();
+            if (context.performed)
+            {
+                IsJumpPressed = true;
+            }
+            else if (context.canceled)
+            {
+                IsJumpPressed = false;
+            }
         }
-        else if (context.phase == InputActionPhase.Canceled)
-        {
-            IsJumpKeyPressed = false; // 松开
-            JumpCanceledEvent?.Invoke();
-        }
-    }
 
-    public void OnAttack(InputAction.CallbackContext context)
-    {
-        if (context.phase == InputActionPhase.Performed)
-            AttackEvent?.Invoke();
-    }
-    
-    // 绑定到 Input System 的 Sprint Action (Shift)
-    public void OnSprint(InputAction.CallbackContext context)
-    {
-        // Phase.Started = 刚按下的那一瞬间 (用于冲刺)
-        if (context.phase == InputActionPhase.Started)
+        public void OnAttack(InputAction.CallbackContext context)
         {
-            DashEvent?.Invoke(); // 响铃！通知所有监听的人
+            if (context.performed)
+            {
+                AttackRequested?.Invoke();
+            }
         }
-    
-        // Phase.Performed = 按住不放 (用于加速跑)
-        if (context.phase == InputActionPhase.Performed)
+
+        public void OnSprint(InputAction.CallbackContext context)
         {
-            IsSprinting = true;
+            if (context.started)
+            {
+                DashRequested?.Invoke();
+            }
+
+            if (context.performed)
+            {
+                IsSprinting = true;
+            }
+            else if (context.canceled)
+            {
+                IsSprinting = false;
+            }
         }
-        // Phase.Canceled = 松开
-        else if (context.phase == InputActionPhase.Canceled)
+
+        /// <summary>
+        /// 消费本次跳跃按下状态，使空中跳和墙跳在按键未释放前只响应一次。
+        /// </summary>
+        public void ConsumeJump()
         {
+            IsJumpPressed = false;
+        }
+
+        private void ResetSnapshot()
+        {
+            MovementValue = Vector2.zero;
+            IsJumpPressed = false;
             IsSprinting = false;
         }
     }
-    
-    // 在 InputReader 类中添加这个方法
-    public void UseJumpInput()
-    {
-        IsJumpKeyPressed = false;
-    }
-    
-    
-    
-    
-
 }

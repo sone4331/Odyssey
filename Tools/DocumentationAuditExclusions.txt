@@ -1,4 +1,2 @@
 # 这些遗留文件将在对应架构重构阶段拆分并移出白名单，避免为即将删除的结构重复补注释。
-Assets/_Project/Code/Unity/Characters/Enemies/Enemy.cs
-Assets/_Project/Code/Unity/Input/InputReader.cs
 Assets/_Project/Code/Unity/Input/Generated/GameInput.cs

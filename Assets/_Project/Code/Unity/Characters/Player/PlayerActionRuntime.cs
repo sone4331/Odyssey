@@ -9,7 +9,7 @@ namespace Odyssey.Characters.Player
 {
     /// <summary>
     /// 玩家动作轴的 Unity 适配器，负责攻击、冲刺和受击的表现与移动覆盖。
-    /// 采用正交状态机、命令请求和对象池式查询缓冲区，让动作不再伪装成 Grounded/Airborne 的子类，也避免每次连击产生状态对象和物理数组。
+    /// 采用正交状态机、命令请求和复用物理查询缓冲区，让动作不再伪装成 Grounded/Airborne 的子类，也避免每次连击产生状态对象和物理数组。
     /// </summary>
     internal sealed class PlayerActionRuntime
     {

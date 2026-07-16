@@ -4,6 +4,7 @@ using Odyssey.Core.Abilities;
 using Odyssey.Gameplay.Characters;
 using Odyssey.Gameplay.Combat;
 using Odyssey.Gameplay.Config;
+using Odyssey.Inputs;
 using Odyssey.Unity.Config;
 using UnityEngine;
 using UnityEngine.Serialization;
@@ -121,8 +122,8 @@ namespace Odyssey.Characters.Player
                 return;
             }
 
-            InputReader.AttackEvent += HandleAttackRequested;
-            InputReader.DashEvent += HandleDashRequested;
+            InputReader.AttackRequested += HandleAttackRequested;
+            InputReader.DashRequested += HandleDashRequested;
         }
 
         private void Start()
@@ -153,8 +154,8 @@ namespace Odyssey.Characters.Player
                 return;
             }
 
-            InputReader.AttackEvent -= HandleAttackRequested;
-            InputReader.DashEvent -= HandleDashRequested;
+            InputReader.AttackRequested -= HandleAttackRequested;
+            InputReader.DashRequested -= HandleDashRequested;
         }
 
         private void OnControllerColliderHit(ControllerColliderHit hit)
