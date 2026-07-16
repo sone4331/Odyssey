@@ -134,8 +134,9 @@ namespace Odyssey.Characters.Player
         {
             var current = _animator.GetCurrentAnimatorStateInfo(0);
             var next = _animator.GetNextAnimatorStateInfo(0);
-            if (current.shortNameHash == targetState.ShortNameHash ||
-                (_animator.IsInTransition(0) && next.shortNameHash == targetState.ShortNameHash))
+            var isTransitioning = _animator.IsInTransition(0);
+            if ((!isTransitioning && current.shortNameHash == targetState.ShortNameHash) ||
+                (isTransitioning && next.shortNameHash == targetState.ShortNameHash))
             {
                 return;
             }

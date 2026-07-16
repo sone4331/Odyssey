@@ -233,7 +233,11 @@ namespace Odyssey.Characters.Player
                 }
 
                 _timer += deltaTime;
-                Player.Controller.Move(Vector3.zero);
+                // 攻击期间仍提交地面吸附速度，避免 CharacterController 因只有零位移而丢失接地事实。
+                var groundStickVelocity = Player.LocomotionState == PlayerLocomotionStateId.Grounded
+                    ? Vector3.up * Player.VerticalVelocity
+                    : Vector3.zero;
+                Player.Controller.Move(groundStickVelocity * deltaTime);
                 var info = Player.Animator.GetCurrentAnimatorStateInfo(0);
                 var normalizedTime = _timer < 0.15f
                     ? 0f
@@ -333,7 +337,11 @@ namespace Odyssey.Characters.Player
                 }
 
                 _remaining -= deltaTime;
-                Player.Controller.Move(_direction * Player.DashForce * deltaTime);
+                // 地面冲刺同时保留向下的贴地速度；否则纯水平 Move 会让 isGrounded 短暂失真并误播下落动画。
+                var groundStickVelocity = Player.LocomotionState == PlayerLocomotionStateId.Grounded
+                    ? Vector3.up * Player.VerticalVelocity
+                    : Vector3.zero;
+                Player.Controller.Move((_direction * Player.DashForce + groundStickVelocity) * deltaTime);
                 return _remaining <= 0f
                     ? StateTransition<PlayerActionStateId>.To(PlayerActionStateId.Free)
                     : StateTransition<PlayerActionStateId>.None;

@@ -87,12 +87,7 @@ namespace Odyssey.Tests.PlayMode
             var player = Object.FindFirstObjectByType<PlayerController>();
             Assert.That(player, Is.Not.Null, "场景中未找到玩家");
 
-            var attackMethod = typeof(PlayerController).GetMethod(
-                "HandleAttackRequested",
-                BindingFlags.Instance | BindingFlags.NonPublic);
-            Assert.That(attackMethod, Is.Not.Null, "未找到玩家攻击命令入口");
-
-            attackMethod.Invoke(player, null);
+            InvokePlayerCommand(player, "HandleAttackRequested");
             yield return null;
             yield return new WaitForFixedUpdate();
             Assert.That(player.ActionState, Is.EqualTo(Odyssey.Gameplay.Characters.PlayerActionStateId.Attack));
@@ -106,7 +101,57 @@ namespace Odyssey.Tests.PlayMode
 
             yield return new WaitForSeconds(0.6f);
             Assert.That(player.ActionState, Is.EqualTo(Odyssey.Gameplay.Characters.PlayerActionStateId.Free));
-            AssertAnimatorState(player.Animator, "Locomotion");
+            AssertAnimatorState(player.Animator, "Locomotion", "受击结束");
+        }
+
+        [UnityTest]
+        public IEnumerator PlayerAnimator_AttackAndGroundDashNaturallyReturnToLocomotion()
+        {
+            var player = Object.FindFirstObjectByType<PlayerController>();
+            Assert.That(player, Is.Not.Null, "场景中未找到玩家");
+
+            InvokePlayerCommand(player, "HandleAttackRequested");
+            yield return null;
+            yield return new WaitForFixedUpdate();
+            Assert.That(player.ActionState, Is.EqualTo(Odyssey.Gameplay.Characters.PlayerActionStateId.Attack));
+
+            yield return new WaitForSeconds(1.2f);
+            yield return new WaitForFixedUpdate();
+            Assert.That(player.ActionState, Is.EqualTo(Odyssey.Gameplay.Characters.PlayerActionStateId.Free),
+                "攻击动画结束后动作轴未恢复空闲");
+            AssertAnimatorState(player.Animator, "Locomotion", "攻击自然结束");
+
+            InvokePlayerCommand(player, "HandleDashRequested");
+            yield return null;
+            yield return new WaitForFixedUpdate();
+            Assert.That(player.ActionState, Is.EqualTo(Odyssey.Gameplay.Characters.PlayerActionStateId.Dash));
+
+            yield return new WaitForSeconds(player.DashDuration + 0.1f);
+            yield return new WaitForFixedUpdate();
+            Assert.That(player.ActionState, Is.EqualTo(Odyssey.Gameplay.Characters.PlayerActionStateId.Free),
+                "冲刺结束后动作轴未恢复空闲");
+            AssertAnimatorState(player.Animator, "Locomotion", "地面冲刺自然结束");
+        }
+
+        [UnityTest]
+        public IEnumerator PlayerAnimator_ActionOwnsAnimationAndBlocksJumpInput()
+        {
+            var player = Object.FindFirstObjectByType<PlayerController>();
+            Assert.That(player, Is.Not.Null, "场景中未找到玩家");
+            Assert.That(player.InputReader, Is.Not.Null, "玩家缺少输入适配器");
+
+            InvokePlayerCommand(player, "HandleAttackRequested");
+            yield return null;
+            yield return new WaitForFixedUpdate();
+            Assert.That(player.ActionState, Is.EqualTo(Odyssey.Gameplay.Characters.PlayerActionStateId.Attack));
+
+            SetJumpPressed(player, true);
+            yield return new WaitForSeconds(0.25f);
+            Assert.That(player.LocomotionState,
+                Is.EqualTo(Odyssey.Gameplay.Characters.PlayerLocomotionStateId.Grounded),
+                "攻击占用控制权时，移动轴仍错误响应了跳跃输入");
+            AssertAnimatorState(player.Animator, "EllenCombo_1", "攻击期间的动画所有权");
+            SetJumpPressed(player, false);
         }
 
         [UnityTest]
@@ -132,6 +177,42 @@ namespace Odyssey.Tests.PlayMode
             AssertAnimatorState(player.Animator, "EllenJumpGoesDown");
 
             SetJumpPressed(player, false);
+            for (var frame = 0;
+                 frame < 180 &&
+                 player.LocomotionState != Odyssey.Gameplay.Characters.PlayerLocomotionStateId.Grounded;
+                 frame++)
+            {
+                yield return null;
+            }
+
+            Assert.That(player.LocomotionState,
+                Is.EqualTo(Odyssey.Gameplay.Characters.PlayerLocomotionStateId.Grounded),
+                "玩家落地后仍停留在空中移动状态");
+            yield return new WaitForFixedUpdate();
+            AssertAnimatorState(player.Animator, "Locomotion");
+        }
+
+        [UnityTest]
+        public IEnumerator PlayerAnimator_DeathAndRespawnRestoreAllRuntimeStates()
+        {
+            var player = Object.FindFirstObjectByType<PlayerController>();
+            Assert.That(player, Is.Not.Null, "场景中未找到玩家");
+            player.RespawnDelay = 0.05f;
+
+            player.TakeDamage(player.CurrentHealth, player.transform.position - player.transform.forward);
+            yield return null;
+            yield return new WaitForFixedUpdate();
+            Assert.That(player.enabled, Is.False, "死亡后玩家控制器仍在执行玩法更新");
+            AssertAnimatorState(player.Animator, "EllenDeath");
+
+            yield return new WaitForSeconds(0.1f);
+            yield return new WaitForFixedUpdate();
+            Assert.That(player.enabled, Is.True, "复活后玩家控制器未重新启用");
+            Assert.That(player.CurrentHealth, Is.EqualTo(player.MaxHealth));
+            Assert.That(player.ActionState, Is.EqualTo(Odyssey.Gameplay.Characters.PlayerActionStateId.Free));
+            Assert.That(player.LocomotionState,
+                Is.EqualTo(Odyssey.Gameplay.Characters.PlayerLocomotionStateId.Grounded));
+            AssertAnimatorState(player.Animator, "Locomotion");
         }
 
         [UnityTest]
@@ -164,7 +245,7 @@ namespace Odyssey.Tests.PlayMode
         /// <summary>
         /// 接受当前状态或正在交叉淡化的下一状态，验证代码驱动目标已经提交给 Animator。
         /// </summary>
-        private static void AssertAnimatorState(Animator animator, string expectedState)
+        private static void AssertAnimatorState(Animator animator, string expectedState, string context = null)
         {
             var expectedHash = Animator.StringToHash(expectedState);
             var current = animator.GetCurrentAnimatorStateInfo(0);
@@ -172,7 +253,9 @@ namespace Odyssey.Tests.PlayMode
             Assert.That(
                 current.shortNameHash == expectedHash || next.shortNameHash == expectedHash,
                 Is.True,
-                $"Animator 未进入或过渡到状态：{expectedState}");
+                $"{context ?? "动画状态检查"}：Animator 未进入或过渡到状态“{expectedState}”。" +
+                $"当前哈希={current.shortNameHash}，下一状态哈希={next.shortNameHash}，" +
+                $"是否过渡={animator.IsInTransition(0)}，当前进度={current.normalizedTime:F2}。");
         }
 
         private static void SetJumpPressed(PlayerController player, bool pressed)
@@ -182,6 +265,15 @@ namespace Odyssey.Tests.PlayMode
                 BindingFlags.Instance | BindingFlags.NonPublic);
             Assert.That(field, Is.Not.Null, "输入适配器的跳跃快照字段不存在");
             field.SetValue(player.InputReader, pressed);
+        }
+
+        private static void InvokePlayerCommand(PlayerController player, string methodName)
+        {
+            var method = typeof(PlayerController).GetMethod(
+                methodName,
+                BindingFlags.Instance | BindingFlags.NonPublic);
+            Assert.That(method, Is.Not.Null, $"未找到玩家命令入口：{methodName}");
+            method.Invoke(player, null);
         }
     }
 }

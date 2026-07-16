@@ -130,6 +130,7 @@ namespace Odyssey.Characters.Player
         {
             Cursor.lockState = CursorLockMode.Locked;
             Cursor.visible = false;
+            MovementEnabled = true;
             _actions.Initialize();
             _locomotion.Initialize();
             _started = true;

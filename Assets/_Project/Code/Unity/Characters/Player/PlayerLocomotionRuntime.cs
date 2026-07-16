@@ -172,7 +172,10 @@ namespace Odyssey.Characters.Player
                 _charging = false;
                 Player.CanAirJump = true;
                 Player.CanAirDash = true;
-                Player.Animation.PlayGrounded();
+                if (Player.MovementEnabled)
+                {
+                    Player.Animation.PlayGrounded();
+                }
             }
 
             public override void Exit()
@@ -183,7 +186,13 @@ namespace Odyssey.Characters.Player
             public override StateTransition<PlayerLocomotionStateId> Tick(float deltaTime)
             {
                 var input = Player.InputReader;
-                if (input != null && input.IsJumpPressed)
+                if (!Player.MovementEnabled)
+                {
+                    // 动作轴拥有控制权时取消蓄力，避免攻击或冲刺结束后补触发一次旧跳跃。
+                    _charging = false;
+                    _chargeTimer = 0f;
+                }
+                else if (input != null && input.IsJumpPressed)
                 {
                     _charging = true;
                     _chargeTimer += deltaTime;
@@ -231,6 +240,11 @@ namespace Odyssey.Characters.Player
             public override void Enter()
             {
                 _fallAnimationStarted = Player.VerticalVelocity <= 0f;
+                if (!Player.MovementEnabled)
+                {
+                    return;
+                }
+
                 if (_fallAnimationStarted)
                 {
                     Player.Animation.PlayFall();
@@ -248,7 +262,7 @@ namespace Odyssey.Characters.Player
             public override StateTransition<PlayerLocomotionStateId> Tick(float deltaTime)
             {
                 var input = Player.InputReader;
-                if (input != null && input.IsJumpPressed && Player.CanAirJump)
+                if (Player.MovementEnabled && input != null && input.IsJumpPressed && Player.CanAirJump)
                 {
                     input.ConsumeJump();
                     Player.CanAirJump = false;
@@ -265,7 +279,7 @@ namespace Odyssey.Characters.Player
                     Runtime.Momentum = Vector3.Lerp(Runtime.Momentum, Vector3.zero, deltaTime * 5f);
                 }
 
-                if (!_fallAnimationStarted && Player.VerticalVelocity <= 0f)
+                if (Player.MovementEnabled && !_fallAnimationStarted && Player.VerticalVelocity <= 0f)
                 {
                     _fallAnimationStarted = true;
                     Player.Animation.PlayFall();
@@ -339,7 +353,11 @@ namespace Odyssey.Characters.Player
 
             public override void Enter()
             {
-                Player.Animation.PlayFall();
+                if (Player.MovementEnabled)
+                {
+                    Player.Animation.PlayFall();
+                }
+
                 if (Runtime.WallNormal != Vector3.zero)
                 {
                     Player.transform.forward = -Runtime.WallNormal;
@@ -353,7 +371,7 @@ namespace Odyssey.Characters.Player
             public override StateTransition<PlayerLocomotionStateId> Tick(float deltaTime)
             {
                 var input = Player.InputReader;
-                var jumpRequested = input != null && input.IsJumpPressed;
+                var jumpRequested = Player.MovementEnabled && input != null && input.IsJumpPressed;
                 if (jumpRequested)
                 {
                     input.ConsumeJump();

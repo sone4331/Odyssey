@@ -42,12 +42,15 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\Tools\Tests\RunHumanReadab
 2. 打开 `Window → General → Test Runner`，切换到 `PlayMode` 页签。
 3. 点击 `Run All`。测试会自动进入 Play Mode、装载 `Level_01` 并在结束后退出。
 
-预期结果：5 项通过、0 项失败。分别验证：
+预期结果：8 项通过、0 项失败。分别验证：
 
 - Bootstrap 应用六点生命配置并生成六个生命图标。
 - 暂停门面同时更新面板和 `Time.timeScale`。
 - 无 Animator 条件连线时，代码仍能驱动攻击、受击和地面恢复。
-- 无 Animator 条件连线时，代码仍能驱动起跳、越过顶点和下落。
+- 攻击和地面冲刺自然结束后，动作轴与 Animator 都恢复到移动状态。
+- 动作轴占用控制权时，移动轴不会响应跳跃输入或覆盖攻击动画。
+- 无 Animator 条件连线时，代码能驱动起跳、越过顶点、下落，并在真正落地后恢复移动动画。
+- 死亡与复活会重置生命、动作轴、移动轴和 Animator 状态。
 - 怪物在真实运行时依次进入追击、攻击和低生命撤退目标。
 
 ## 四、场景与配置验收
@@ -135,7 +138,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\Tools\Tests\RunHumanReadab
 ## 十、最终通过标准
 
 - Unity Console 无编译错误、Missing Script 和项目自有持续异常。
-- 51 项核心规格、17 项 EditMode、5 项 PlayMode 全部通过。
+- 51 项核心规格、17 项 EditMode、8 项 PlayMode 全部通过。
 - 六点生命配置、六格血条、墙滑/墙跳配置、暂停存档和 AI 四目标均可实际复现。
 - Animator 的移动、跳跃、连击、冲刺、受击、死亡与复活衔接连贯。
 - 场景验证结果为 0 个 Missing Script、0 个破损 Prefab。
