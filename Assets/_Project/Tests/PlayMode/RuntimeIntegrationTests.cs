@@ -52,6 +52,8 @@ namespace Odyssey.Tests.PlayMode
             Assert.That(player.MaxHealth, Is.EqualTo(6), "Bootstrap 未应用导表后的六点生命配置");
             Assert.That(player.CurrentHealth, Is.EqualTo(6), "玩家初始生命未与最大生命同步");
             Assert.That(heartContainer.transform.childCount, Is.EqualTo(6), "血量图标池未扩容到六格");
+            Assert.That((player.WallLayer.value & (1 << 16)) != 0, Is.True,
+                "玩家未配置关卡墙面层，墙滑和墙跳分支不可达");
 
             yield return null;
         }
