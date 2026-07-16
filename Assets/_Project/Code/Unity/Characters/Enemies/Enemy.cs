@@ -1,3 +1,4 @@
+using Odyssey.Gameplay.AI;
 using Odyssey.Gameplay.Combat;
 using Odyssey.Gameplay.Config;
 using Odyssey.Unity.Config;
@@ -8,8 +9,8 @@ using UnityEngine.Serialization;
 namespace Odyssey.Characters.Enemies
 {
     /// <summary>
-    /// 作为现阶段怪物的 Unity 适配器驱动导航、动画与死亡表现，并把生命规则委托给共享 Health。
-    /// 采用 Adapter 与配置目标模式保留现有场景和动画事件兼容；AI 决策将在后续模块拆出，本类不再自行维护第二套伤害规则。
+    /// 怪物角色的 Unity 门面，负责装配 Health、Perception、Blackboard、Utility 决策和 Action 执行层。
+    /// 采用 Facade 与 Composition Root 模式保留现有场景脚本 GUID；本类只编排数据流和事件，不再直接实现追击决策与导航细节。
     /// </summary>
     public sealed class Enemy : MonoBehaviour, IConfigTarget<EnemyConfigData>, IDamageable
     {
@@ -28,30 +29,27 @@ namespace Odyssey.Characters.Enemies
 
         private Animator _animator;
         private NavMeshAgent _agent;
-        private Transform _targetPlayer;
         private Health _health;
         private EnemyConfigData _appliedConfig;
-        private float _lastAttackTime;
-        private float _actionLockTimer;
+        private EnemyBlackboard _blackboard;
+        private EnemyDecisionModel _decisionModel;
+        private EnemyPerception _perception;
+        private EnemyActionRuntime _actions;
         private bool _isDead;
-        private string _currentAnimation = string.Empty;
         private Vector3 _deathFlyDirection;
         private float _deathFlySpeed;
 
         public string ConfigId => configId;
         public int CurrentHealth => _health?.Current ?? maxHealth;
+        public EnemyGoal CurrentGoal => _blackboard?.CurrentGoal ?? EnemyGoal.Idle;
+        public float DecisionScore => _blackboard?.CurrentScore ?? 0f;
+        public float TargetDistance => _blackboard?.DistanceToTarget ?? float.MaxValue;
+        public float HealthRatio => _blackboard?.HealthRatio ?? 1f;
 
         private void Awake()
         {
-            _animator = GetComponent<Animator>();
-            _agent = GetComponent<NavMeshAgent>();
+            EnsureRuntimeDependencies();
             RebuildHealth(maxHealth, maxHealth);
-        }
-
-        private void Start()
-        {
-            var playerObject = GameObject.FindGameObjectWithTag("Player");
-            _targetPlayer = playerObject != null ? playerObject.transform : null;
         }
 
         private void Update()
@@ -62,47 +60,32 @@ namespace Odyssey.Characters.Enemies
                 return;
             }
 
-            if (_targetPlayer == null || _agent == null || !_agent.isOnNavMesh)
+            _perception.Sense(
+                _blackboard,
+                CurrentHealth,
+                _health.Maximum,
+                ChaseRange,
+                AttackRange,
+                _actions.CanAttack(Time.time, AttackCooldown));
+
+            if (_actions.TickLock(Time.deltaTime))
             {
                 return;
             }
 
-            if (_actionLockTimer > 0f)
-            {
-                _actionLockTimer -= Time.deltaTime;
-                StopNavigation();
-                return;
-            }
-
-            var distance = Vector3.Distance(transform.position, _targetPlayer.position);
-            if (distance <= AttackRange)
-            {
-                StopNavigation();
-                if (Time.time >= _lastAttackTime + AttackCooldown)
-                {
-                    ExecuteAttack();
-                }
-                else
-                {
-                    PlayAnimation("Idle");
-                }
-            }
-            else if (distance <= ChaseRange)
-            {
-                _agent.isStopped = false;
-                _agent.SetDestination(_targetPlayer.position);
-                PlayAnimation("Run");
-            }
-            else
-            {
-                StopNavigation();
-                PlayAnimation("Idle");
-            }
+            var decision = _decisionModel.Decide(_blackboard.Context);
+            _blackboard.CommitDecision(decision);
+            _actions.Execute(
+                decision,
+                _perception.Target,
+                Time.time,
+                AttackCooldown,
+                Time.deltaTime);
         }
 
         /// <summary>
         /// 应用导表后的不可变敌人配置，并在生命上限变化时保留不超过新上限的当前生命。
-        /// 配置装配只改变数值，不查找资源或修改场景引用。
+        /// 配置装配只改变实际使用的战斗和感知数值，不创建额外 AI 框架或场景依赖。
         /// </summary>
         public void Apply(EnemyConfigData config)
         {
@@ -127,11 +110,12 @@ namespace Odyssey.Characters.Enemies
         }
 
         /// <summary>
-        /// 通过共享 IDamageable 端口提交伤害，并根据同一个 DamageResult 触发受击或死亡表现。
-        /// 领域状态先提交，Animator 与 NavMesh 只消费结果，保证以后 Host 权威验证和本地表现使用同一事实。
+        /// 通过共享 Health 提交伤害，再以结果事件打断常规 Utility 行为。
+        /// 受击与死亡拥有高于目标选择的优先级，避免低生命撤退等常规决策覆盖受击表现。
         /// </summary>
         public DamageResult Apply(DamageRequest request)
         {
+            EnsureRuntimeDependencies();
             EnsureHealth();
             var result = _health.Apply(request);
             if (!result.Accepted)
@@ -145,17 +129,14 @@ namespace Odyssey.Characters.Enemies
             }
             else
             {
-                PlayAnimation("Hit" + Random.Range(1, 5));
-                _currentAnimation = string.Empty;
-                _actionLockTimer = 0.5f;
-                StopNavigation();
+                _actions.NotifyHit();
             }
 
             return result;
         }
 
         /// <summary>
-        /// 保留现有玩家攻击调用入口，并把旧参数适配为统一 DamageRequest。
+        /// 保留现有玩家攻击入口，并把旧参数适配为统一 DamageRequest。
         /// </summary>
         public void TakeDamage(int damage)
         {
@@ -163,7 +144,7 @@ namespace Odyssey.Characters.Enemies
         }
 
         /// <summary>
-        /// 由攻击动画命中帧调用；物理查询只负责找到玩家，最终扣血仍交给玩家的统一生命管线。
+        /// 由攻击动画命中帧调用；低频动画事件继续使用简单查询，不为了 Demo 强行引入全局 NonAlloc 或对象池体系。
         /// </summary>
         public void AttackBegin()
         {
@@ -173,7 +154,7 @@ namespace Odyssey.Characters.Enemies
             }
 
             var attackCenter = transform.position + Vector3.up + transform.forward * 0.5f;
-            foreach (var hit in Physics.OverlapSphere(attackCenter, 2f))
+            foreach (var hit in Physics.OverlapSphere(attackCenter, AttackRange))
             {
                 var player = hit.GetComponentInParent<Player.PlayerController>();
                 if (player == null)
@@ -184,20 +165,6 @@ namespace Odyssey.Characters.Enemies
                 player.TakeDamage(AttackDamage, transform.position);
                 break;
             }
-        }
-
-        private void ExecuteAttack()
-        {
-            _lastAttackTime = Time.time;
-            _actionLockTimer = 1.2f;
-            var direction = (_targetPlayer.position - transform.position).normalized;
-            direction.y = 0f;
-            if (direction != Vector3.zero)
-            {
-                transform.rotation = Quaternion.LookRotation(direction);
-            }
-
-            PlayAnimation("Attack");
         }
 
         private void RebuildHealth(int maximum, int current)
@@ -218,44 +185,33 @@ namespace Odyssey.Characters.Enemies
             }
         }
 
-        private void StopNavigation()
+        /// <summary>
+        /// 延迟装配怪物运行时协作者，使场景生命周期、EditMode 测试和配置工具都能安全调用同一入口。
+        /// 采用惰性初始化而非要求调用方了解 Awake 顺序，避免测试或编辑器工具在组件尚未唤醒时产生空引用。
+        /// </summary>
+        private void EnsureRuntimeDependencies()
         {
-            if (_agent == null || !_agent.isOnNavMesh)
-            {
-                return;
-            }
-
-            _agent.isStopped = true;
-            _agent.velocity = Vector3.zero;
-        }
-
-        private void PlayAnimation(string animationName)
-        {
-            if (_animator == null || _currentAnimation == animationName)
-            {
-                return;
-            }
-
-            _animator.CrossFade(animationName, 0.1f);
-            _currentAnimation = animationName;
+            _animator ??= GetComponent<Animator>();
+            _agent ??= GetComponent<NavMeshAgent>();
+            _blackboard ??= new EnemyBlackboard();
+            _decisionModel ??= new EnemyDecisionModel();
+            _perception ??= new EnemyPerception(transform);
+            _actions ??= new EnemyActionRuntime(transform, _animator, _agent);
         }
 
         private void Die()
         {
             _isDead = true;
-            if (_agent != null)
-            {
-                _agent.enabled = false;
-            }
-
+            _actions.DisableNavigation();
             var collision = GetComponent<Collider>();
             if (collision != null)
             {
                 collision.enabled = false;
             }
 
-            _deathFlyDirection = _targetPlayer != null
-                ? (transform.position - _targetPlayer.position).normalized
+            var target = _perception.Target;
+            _deathFlyDirection = target != null
+                ? (transform.position - target.position).normalized
                 : Vector3.up;
             _deathFlyDirection.y = 1.5f;
             _deathFlySpeed = 8f;
@@ -274,7 +230,7 @@ namespace Odyssey.Characters.Enemies
             transform.localScale = Vector3.Lerp(transform.localScale, Vector3.zero, Time.deltaTime * 3f);
         }
 
-        // 以下空方法保留给第三方动画片段中的既有 Animation Event，避免资源在迁移期间持续报错。
+        // 以下方法匹配现有 Animation Event；命中逻辑只由 AttackBegin 执行，其他事件不承担玩法规则。
         public void AttackEnd() { }
         public void PlayStep() { }
         public void Grunt() { }

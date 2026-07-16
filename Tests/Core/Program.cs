@@ -8,6 +8,7 @@ internal static class Program
         AbilitySystemSpecs.Register();
         HealthSpecs.Register();
         UtilityGoalSelectorSpecs.Register();
+        EnemyDecisionSpecs.Register();
         SaveMigrationSpecs.Register();
         AtomicFileSaveServiceSpecs.Register();
         ConfigDatabaseSpecs.Register();
