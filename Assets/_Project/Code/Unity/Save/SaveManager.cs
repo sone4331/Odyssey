@@ -1,13 +1,15 @@
 using Odyssey.Characters.Player;
 using Odyssey.Gameplay.Save;
+using Odyssey.Unity.Save;
 using UnityEngine;
+using UnityEngine.InputSystem;
 using UnityEngine.Serialization;
 
 namespace Odyssey.Systems
 {
     /// <summary>
-    /// 作为 Unity 场景适配器收集与恢复玩家快照，并把持久化委托给 ISaveService。
-    /// 采用 Facade 与 Adapter 模式兼容现有按钮绑定，同时将 JSON、原子写入和版本规则移出 MonoBehaviour。
+    /// 保留场景按钮与旧方法名的兼容门面，把暂停副作用和玩家快照读写分别委托给独立运行时对象。
+    /// 采用 Facade 模式维持现有场景 GUID 和 Button 引用，同时避免一个 MonoBehaviour 同时维护三类状态。
     /// </summary>
     public sealed class SaveManager : MonoBehaviour
     {
@@ -19,8 +21,13 @@ namespace Odyssey.Systems
         [FormerlySerializedAs("Player")]
         [SerializeField] private PlayerController player;
 
-        private bool _isPaused;
-        private ISaveService<PlayerSaveData> _saveService;
+        private PauseRuntime _pause;
+        private PlayerSaveRuntime _playerSave;
+
+        private void Awake()
+        {
+            _pause = new PauseRuntime(pauseMenuPanel);
+        }
 
         /// <summary>
         /// 由场景 Installer 注入应用级存档端口，避免场景组件自行决定文件路径、编码器和服务生命周期。
@@ -28,82 +35,57 @@ namespace Odyssey.Systems
         /// </summary>
         public void Configure(ISaveService<PlayerSaveData> saveService)
         {
-            _saveService = saveService ?? throw new System.ArgumentNullException(nameof(saveService));
+            _playerSave = new PlayerSaveRuntime(
+                player,
+                saveService ?? throw new System.ArgumentNullException(nameof(saveService)));
         }
 
         private void Update()
         {
-            // 暂时保留旧暂停输入；将在玩家输入里程碑迁移到 InputReader。
-            if (Input.GetKeyDown(KeyCode.P) || Input.GetKeyDown(KeyCode.Escape))
+            var keyboard = Keyboard.current;
+            if (keyboard != null &&
+                (keyboard.pKey.wasPressedThisFrame || keyboard.escapeKey.wasPressedThisFrame))
             {
-                SetPaused(!_isPaused);
+                _pause.SetPaused(!_pause.IsPaused);
             }
         }
 
-        public void PauseGame() => SetPaused(true);
-        public void ResumeGame() => SetPaused(false);
+        private void OnDestroy()
+        {
+            _pause?.Dispose();
+        }
+
+        public void PauseGame() => _pause.SetPaused(true);
+        public void ResumeGame() => _pause.SetPaused(false);
 
         public void SaveGame()
         {
-            if (_saveService == null)
+            if (_playerSave == null)
             {
                 Debug.LogError("保存失败：场景尚未注入存档服务。", this);
                 return;
             }
 
-            if (player == null)
+            if (_playerSave.Save())
             {
-                Debug.LogError("保存失败：未指定玩家。", this);
-                return;
+                Debug.Log("游戏已保存。", this);
+                _pause.SetPaused(false);
             }
-
-            var position = player.transform.position;
-            _saveService.Save(new PlayerSaveData
-            {
-                health = player.CurrentHealth,
-                posX = position.x,
-                posY = position.y,
-                posZ = position.z
-            });
-
-            Debug.Log("游戏已保存。", this);
-            SetPaused(false);
         }
 
         public void LoadGame()
         {
-            if (_saveService == null)
+            if (_playerSave == null)
             {
                 Debug.LogError("读取失败：场景尚未注入存档服务。", this);
                 return;
             }
 
-            if (player == null)
+            if (_playerSave.Load())
             {
-                Debug.LogError("读取失败：未指定玩家。", this);
-                return;
+                Debug.Log("游戏已读取。", this);
+                _pause.SetPaused(false);
             }
-
-            if (!_saveService.TryLoad(out var data))
-            {
-                Debug.LogWarning("未找到有效存档文件。", this);
-                return;
-            }
-
-            if (data.Version != PlayerSaveData.CurrentVersion)
-            {
-                Debug.LogError($"不支持存档版本 {data.Version}。", this);
-                return;
-            }
-
-            player.SetHealth(data.health, "load");
-            var controller = player.Controller;
-            controller.enabled = false;
-            player.transform.position = new Vector3(data.posX, data.posY, data.posZ);
-            controller.enabled = true;
-
-            Debug.Log("游戏已读取。", this);
-            SetPaused(false);
         }
 
         // 暂时保留旧方法名，保证重构期间场景中的 Button 事件引用不失效。
@@ -119,18 +101,5 @@ namespace Odyssey.Systems
 #endif
         }
 
-        private void SetPaused(bool paused)
-        {
-            _isPaused = paused;
-            Time.timeScale = paused ? 0f : 1f;
-
-            if (pauseMenuPanel != null)
-            {
-                pauseMenuPanel.SetActive(paused);
-            }
-
-            Cursor.visible = paused;
-            Cursor.lockState = paused ? CursorLockMode.None : CursorLockMode.Locked;
-        }
     }
 }

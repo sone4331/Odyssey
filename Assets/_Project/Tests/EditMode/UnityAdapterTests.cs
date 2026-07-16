@@ -34,6 +34,34 @@ namespace Odyssey.Tests
         }
 
         [Test]
+        public void PauseRuntime_UpdatesPanelAndRestoresGlobalTimeScale()
+        {
+            var panel = new GameObject("测试暂停面板");
+            var previousTimeScale = Time.timeScale;
+            var runtime = new PauseRuntime(panel);
+            try
+            {
+                runtime.SetPaused(true);
+
+                Assert.That(runtime.IsPaused, Is.True);
+                Assert.That(panel.activeSelf, Is.True);
+                Assert.That(Time.timeScale, Is.Zero);
+
+                runtime.SetPaused(false);
+
+                Assert.That(runtime.IsPaused, Is.False);
+                Assert.That(panel.activeSelf, Is.False);
+                Assert.That(Time.timeScale, Is.EqualTo(1f));
+            }
+            finally
+            {
+                runtime.Dispose();
+                Time.timeScale = previousTimeScale;
+                Object.DestroyImmediate(panel);
+            }
+        }
+
+        [Test]
         public void Health_ClampsLethalDamage()
         {
             var health = new Health(3);
