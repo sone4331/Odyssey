@@ -21,6 +21,10 @@ namespace Odyssey.Editor.Characters
             {
                 EditorGUILayout.TextField("移动状态", player.LocomotionState.ToString());
                 EditorGUILayout.TextField("动作状态", player.ActionState.ToString());
+                EditorGUILayout.FloatField("平面速度", player.CurrentPlanarSpeed);
+                EditorGUILayout.Vector3Field("期望移动方向", player.DesiredMoveDirection);
+                EditorGUILayout.FloatField("地面坡度", player.GroundSlopeAngle);
+                EditorGUILayout.Toggle("墙边保护", player.WallClearanceActive);
                 EditorGUILayout.IntField("当前生命", player.CurrentHealth);
                 EditorGUILayout.IntField("最大生命", player.MaxHealth);
             }

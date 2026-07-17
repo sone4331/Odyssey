@@ -31,8 +31,14 @@ namespace Odyssey.Characters.Player
         [Header("基础移动")]
         public float Gravity = -15f;
         public float VerticalVelocity;
-        public float WalkSpeed = 6f;
-        public float RunSpeed = 10f;
+        public float WalkSpeed = 4f;
+        public float RunSpeed = 8f;
+        public float GroundAcceleration = 20f;
+        public float GroundDeceleration = 25f;
+        public float MinTurnSpeed = 400f;
+        public float MaxTurnSpeed = 1200f;
+        [Tooltip("关卡地面与斜坡所在层，用于坡面投影和脚部贴地。")]
+        public LayerMask GroundLayer;
 
         [Header("冲刺")]
         public float DashForce = 20f;
@@ -57,6 +63,7 @@ namespace Odyssey.Characters.Player
         public float AttackRange = 1.5f;
         public int AttackDamage = 1;
         public float AttackCooldown = 0.5f;
+        public float AttackAdvanceSpeed = 1.5f;
         public LayerMask EnemyLayer;
 
         [Header("生命")]
@@ -88,6 +95,10 @@ namespace Odyssey.Characters.Player
         public IAbilitySystem Abilities => _runtime?.Abilities;
         public PlayerLocomotionStateId LocomotionState => _locomotion?.CurrentStateId ?? PlayerLocomotionStateId.Grounded;
         public PlayerActionStateId ActionState => _actions?.CurrentStateId ?? PlayerActionStateId.Free;
+        public float CurrentPlanarSpeed => _locomotion?.CurrentPlanarSpeed ?? 0f;
+        public Vector3 DesiredMoveDirection => _locomotion?.DesiredMoveDirection ?? Vector3.zero;
+        public float GroundSlopeAngle => _locomotion?.GroundSlopeAngle ?? 0f;
+        public bool WallClearanceActive => _locomotion?.WallClearanceActive ?? false;
 
         public event Action<HealthChanged> HealthChanged;
         public event Action RuntimeConfigured;
@@ -176,6 +187,18 @@ namespace Odyssey.Characters.Player
         }
 
         /// <summary>
+        /// 在 Scene 视图展示地面探测方向与 Ellen 常态手臂安全半径，便于调试斜坡和狭窄通道。
+        /// </summary>
+        private void OnDrawGizmosSelected()
+        {
+            Gizmos.color = WallClearanceActive ? Color.yellow : Color.cyan;
+            Gizmos.DrawWireSphere(transform.position + Vector3.up * 0.75f, PlayerWallClearanceSolver.VisualRadius);
+            Gizmos.DrawWireSphere(transform.position + Vector3.up * 1.25f, PlayerWallClearanceSolver.VisualRadius);
+            Gizmos.color = Color.green;
+            Gizmos.DrawLine(transform.position + Vector3.up * 0.5f, transform.position + Vector3.down * 0.25f);
+        }
+
+        /// <summary>
         /// 通过共享 Health 管线提交伤害，再把 DamageResult 翻译为死亡或受击动作。
         /// 领域状态先提交、表现后响应，保证 UI、动画和未来 Host 权威网络使用同一份生命事实。
         /// </summary>
@@ -233,6 +256,14 @@ namespace Odyssey.Characters.Player
         }
 
         /// <summary>
+        /// 由会接管位移的动作清空移动轴速度；动作层不直接访问移动状态实例，保持两条状态轴单向协调。
+        /// </summary>
+        internal void StopPlanarMotion()
+        {
+            _locomotion?.StopPlanarMotion();
+        }
+
+        /// <summary>
         /// 为存档和调试工具提供统一生命设置入口，禁止外部直接改写序列化字段。
         /// </summary>
         public void SetHealth(int value, string sourceId = "external")
@@ -273,6 +304,10 @@ namespace Odyssey.Characters.Player
             Gravity = config.Gravity;
             WalkSpeed = config.WalkSpeed;
             RunSpeed = config.RunSpeed;
+            GroundAcceleration = config.GroundAcceleration;
+            GroundDeceleration = config.GroundDeceleration;
+            MinTurnSpeed = config.MinTurnSpeed;
+            MaxTurnSpeed = config.MaxTurnSpeed;
             DashForce = config.DashForce;
             DashDuration = config.DashDuration;
             GroundDashCooldown = config.DashCooldown;
@@ -286,6 +321,7 @@ namespace Odyssey.Characters.Player
             AttackDamage = config.AttackDamage;
             AttackRange = config.AttackRange;
             AttackCooldown = config.AttackCooldown;
+            AttackAdvanceSpeed = config.AttackAdvanceSpeed;
             maxHealth = config.MaxHealth;
             RebuildRuntimeSystems(config, preservedHealth);
             _appliedConfig = config;
@@ -337,7 +373,12 @@ namespace Odyssey.Characters.Player
                 AttackDamage,
                 AttackRange,
                 AttackCooldown,
-                Mathf.Max(1, maxHealth));
+                Mathf.Max(1, maxHealth),
+                GroundAcceleration,
+                GroundDeceleration,
+                MinTurnSpeed,
+                MaxTurnSpeed,
+                AttackAdvanceSpeed);
         }
 
         private void RebuildRuntimeSystems(PlayerConfigData config, int healthToPreserve)
@@ -374,6 +415,7 @@ namespace Odyssey.Characters.Player
 
             _runtime.Health.Reset("respawn");
             _isDead = false;
+            VerticalVelocity = 0f;
             Controller.enabled = false;
             if (RespawnPoint != null)
             {
@@ -392,10 +434,11 @@ namespace Odyssey.Characters.Player
         }
 
         /// <summary>
-        /// 保留动画剪辑中的旧事件签名；实际命中窗口由动作轴按动画进度统一驱动。
+        /// 保留官方动画剪辑的事件签名，并把动画作者标注的挥击时段转交给动作轴作为唯一命中窗口。
         /// </summary>
-        public void MeleeAttackStart()
+        public void MeleeAttackStart(int throwing = 0)
         {
+            _actions?.OpenAttackWindow();
         }
 
         /// <summary>
@@ -403,6 +446,7 @@ namespace Odyssey.Characters.Player
         /// </summary>
         public void MeleeAttackEnd()
         {
+            _actions?.CloseAttackWindow();
         }
     }
 }

@@ -4,6 +4,7 @@
   "references": [
     "Odyssey.Core",
     "Odyssey.Gameplay",
+    "Unity.Animation.Rigging",
     "Unity.ugui",
     "Unity.InputSystem"
   ],

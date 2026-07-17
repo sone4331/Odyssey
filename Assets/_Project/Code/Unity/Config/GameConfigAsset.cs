@@ -90,12 +90,18 @@ namespace Odyssey.Unity.Config
         public float attackRange;
         public float attackCooldown;
         public int maxHealth;
+        public float groundAcceleration;
+        public float groundDeceleration;
+        public float minTurnSpeed;
+        public float maxTurnSpeed;
+        public float attackAdvanceSpeed;
 
         public PlayerConfigData ToData() => new PlayerConfigData(
             id, walkSpeed, runSpeed, gravity, dashForce, dashDuration, dashCooldown,
             jumpHeight, chargeJumpHeight, minChargeTime, airJumpHeight,
             wallSlideSpeed, wallJumpUpForce, wallJumpSideForce,
-            attackDamage, attackRange, attackCooldown, maxHealth);
+            attackDamage, attackRange, attackCooldown, maxHealth,
+            groundAcceleration, groundDeceleration, minTurnSpeed, maxTurnSpeed, attackAdvanceSpeed);
     }
 
     [Serializable]

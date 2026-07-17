@@ -71,7 +71,12 @@ namespace Odyssey.Editor.Config
                     attackDamage = ParseInt(row["attackDamage"], path, "attackDamage"),
                     attackRange = ParseFloat(row["attackRange"], path, "attackRange"),
                     attackCooldown = ParseFloat(row["attackCooldown"], path, "attackCooldown"),
-                    maxHealth = ParseInt(row["maxHealth"], path, "maxHealth")
+                    maxHealth = ParseInt(row["maxHealth"], path, "maxHealth"),
+                    groundAcceleration = ParseFloat(row["groundAcceleration"], path, "groundAcceleration"),
+                    groundDeceleration = ParseFloat(row["groundDeceleration"], path, "groundDeceleration"),
+                    minTurnSpeed = ParseFloat(row["minTurnSpeed"], path, "minTurnSpeed"),
+                    maxTurnSpeed = ParseFloat(row["maxTurnSpeed"], path, "maxTurnSpeed"),
+                    attackAdvanceSpeed = ParseFloat(row["attackAdvanceSpeed"], path, "attackAdvanceSpeed")
                 });
             }
 

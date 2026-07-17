@@ -14,8 +14,8 @@ MonoBehaviour:
   m_EditorClassIdentifier:
   players:
   - id: player
-    walkSpeed: 6
-    runSpeed: 10
+    walkSpeed: 4
+    runSpeed: 8
     gravity: -15
     dashForce: 20
     dashDuration: 0.2
@@ -31,6 +31,11 @@ MonoBehaviour:
     attackRange: 2
     attackCooldown: 0.5
     maxHealth: 6
+    groundAcceleration: 20
+    groundDeceleration: 25
+    minTurnSpeed: 400
+    maxTurnSpeed: 1200
+    attackAdvanceSpeed: 1.5
   enemies:
   - id: chomper
     chaseRange: 10

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using Odyssey.Core.FSM;
 using Odyssey.Gameplay.Characters;
 using Odyssey.Characters.Enemies;
+using Odyssey.Inputs;
 using UnityEngine;
 
 namespace Odyssey.Characters.Player
@@ -19,6 +20,10 @@ namespace Odyssey.Characters.Player
         private readonly GroundedState _groundedState;
         private readonly AirborneState _airborneState;
         private readonly WallSlideState _wallSlideState;
+        private readonly PlayerWallClearanceSolver _wallClearance;
+        private float _currentPlanarSpeed;
+        private Vector3 _desiredMoveDirection;
+        private float _groundSlopeAngle;
 
         public PlayerLocomotionRuntime(PlayerController player)
         {
@@ -26,6 +31,7 @@ namespace Odyssey.Characters.Player
             _groundedState = new GroundedState(this);
             _airborneState = new AirborneState(this);
             _wallSlideState = new WallSlideState(this);
+            _wallClearance = new PlayerWallClearanceSolver(player);
             _machine = new DeferredStateMachine<PlayerLocomotionStateId>(
                 new Dictionary<PlayerLocomotionStateId, IState<PlayerLocomotionStateId>>
                 {
@@ -38,6 +44,10 @@ namespace Odyssey.Characters.Player
         public PlayerLocomotionStateId CurrentStateId => _machine.CurrentId;
         public Vector3 WallNormal { get; set; }
         public Vector3 Momentum { get; set; }
+        public float CurrentPlanarSpeed => _currentPlanarSpeed;
+        public Vector3 DesiredMoveDirection => _desiredMoveDirection;
+        public float GroundSlopeAngle => _groundSlopeAngle;
+        public bool WallClearanceActive => _wallClearance.IsActive;
 
         /// <summary>
         /// 进入初始地面状态。初始化只执行一次，复活应调用 Reset，避免重复装配导致事件和计时器残留。
@@ -64,7 +74,19 @@ namespace Odyssey.Characters.Player
         {
             Momentum = Vector3.zero;
             WallNormal = Vector3.zero;
+            _currentPlanarSpeed = 0f;
+            _desiredMoveDirection = Vector3.zero;
+            _groundSlopeAngle = 0f;
             _machine.Reset(PlayerLocomotionStateId.Grounded);
+        }
+
+        /// <summary>
+        /// 在攻击、受击等明确的动作边界清空地面惯性，避免动作结束后恢复旧速度造成滑步。
+        /// </summary>
+        public void StopPlanarMotion()
+        {
+            _currentPlanarSpeed = 0f;
+            _desiredMoveDirection = Vector3.zero;
         }
 
         private abstract class LocomotionState : IState<PlayerLocomotionStateId>
@@ -103,24 +125,83 @@ namespace Odyssey.Characters.Player
                     return;
                 }
 
-                var input = Player.InputReader == null ? Vector2.zero : Player.InputReader.MovementValue;
+                var input = Player.InputReader == null
+                    ? Vector2.zero
+                    : Vector2.ClampMagnitude(Player.InputReader.MovementValue, 1f);
                 var direction = ReadCameraDirection(input);
-                var speed = (Player.InputReader != null && Player.InputReader.IsSprinting
+                if (direction.sqrMagnitude > 1f)
+                {
+                    direction.Normalize();
+                }
+
+                Runtime._desiredMoveDirection = direction;
+                var maximumSpeed = (Player.InputReader != null && Player.InputReader.IsSprinting
                     ? Player.RunSpeed
                     : Player.WalkSpeed) * speedMultiplier;
-                var velocity = direction * speed + additionalVelocity;
-                velocity.y = Player.VerticalVelocity;
-                Player.Controller.Move(velocity * deltaTime);
+                var targetSpeed = input.magnitude * maximumSpeed;
+                var acceleration = targetSpeed > Runtime._currentPlanarSpeed
+                    ? Player.GroundAcceleration
+                    : Player.GroundDeceleration;
+                Runtime._currentPlanarSpeed = Mathf.MoveTowards(
+                    Runtime._currentPlanarSpeed,
+                    targetSpeed,
+                    acceleration * deltaTime);
 
-                var animationSpeed = input == Vector2.zero ? 0f : 1f;
-                Player.Animation.SetLocomotionSpeed(animationSpeed, deltaTime);
                 if (direction != Vector3.zero)
                 {
-                    Player.transform.forward = Vector3.Slerp(
-                        Player.transform.forward,
-                        direction,
-                        deltaTime * 10f);
+                    var speedRatio = Mathf.Clamp01(Runtime._currentPlanarSpeed / Mathf.Max(0.01f, Player.RunSpeed));
+                    var turnSpeed = Mathf.Lerp(Player.MaxTurnSpeed, Player.MinTurnSpeed, speedRatio);
+                    if (Runtime.CurrentStateId != PlayerLocomotionStateId.Grounded)
+                    {
+                        turnSpeed *= 0.65f;
+                    }
+
+                    Player.transform.rotation = Quaternion.RotateTowards(
+                        Player.transform.rotation,
+                        Quaternion.LookRotation(direction),
+                        turnSpeed * deltaTime);
                 }
+
+                var movementDirection = Player.transform.forward;
+                Runtime._groundSlopeAngle = 0f;
+                if (Runtime.CurrentStateId == PlayerLocomotionStateId.Grounded &&
+                    TryGetGroundHit(out var groundHit))
+                {
+                    Runtime._groundSlopeAngle = Vector3.Angle(Vector3.up, groundHit.normal);
+                    movementDirection = PlayerMovementMath.ProjectDirectionOnGround(
+                        movementDirection,
+                        groundHit.normal);
+                }
+
+                var velocity = movementDirection * Runtime._currentPlanarSpeed + additionalVelocity;
+                velocity.y += Player.VerticalVelocity;
+                var displacement = velocity * deltaTime;
+                if (Runtime.CurrentStateId == PlayerLocomotionStateId.Grounded)
+                {
+                    displacement = Runtime._wallClearance.Constrain(displacement);
+                }
+
+                Player.Controller.Move(displacement);
+
+                var animationSpeed = Runtime._currentPlanarSpeed / Mathf.Max(0.01f, Player.RunSpeed);
+                Player.Animation.SetLocomotionSpeed(animationSpeed, deltaTime);
+            }
+
+            /// <summary>
+            /// 使用略小于胶囊半径的球形探测读取稳定坡面法线，避免单点射线在台阶边缘频繁跳变。
+            /// </summary>
+            private bool TryGetGroundHit(out RaycastHit hit)
+            {
+                var radius = Mathf.Max(0.05f, Player.Controller.radius - Player.Controller.skinWidth - 0.02f);
+                var origin = Player.transform.position + Vector3.up * (radius + 0.15f);
+                return Physics.SphereCast(
+                    origin,
+                    radius,
+                    Vector3.down,
+                    out hit,
+                    radius + 0.35f,
+                    Player.GroundLayer,
+                    QueryTriggerInteraction.Ignore);
             }
 
             protected bool TryFindWall(out RaycastHit hit)
@@ -156,8 +237,12 @@ namespace Odyssey.Characters.Player
 
         private sealed class GroundedState : LocomotionState
         {
+            private const float LandingImpactThreshold = -6f;
+            private const float LandingInputUnlockTime = 0.08f;
             private float _groundGraceTimer;
             private float _chargeTimer;
+            private float _landingRemaining;
+            private float _landingUnlockRemaining;
             private bool _charging;
 
             public GroundedState(PlayerLocomotionRuntime runtime) : base(runtime)
@@ -166,6 +251,7 @@ namespace Odyssey.Characters.Player
 
             public override void Enter()
             {
+                var landingVelocity = Player.VerticalVelocity;
                 Player.VerticalVelocity = -5f;
                 _groundGraceTimer = 0.2f;
                 _chargeTimer = 0f;
@@ -174,7 +260,19 @@ namespace Odyssey.Characters.Player
                 Player.CanAirDash = true;
                 if (Player.MovementEnabled)
                 {
-                    Player.Animation.PlayGrounded();
+                    if (landingVelocity <= LandingImpactThreshold)
+                    {
+                        var speedRatio = Runtime._currentPlanarSpeed / Mathf.Max(0.01f, Player.RunSpeed);
+                        _landingRemaining = Runtime._currentPlanarSpeed > 0.1f ? 0.22f : 0.32f;
+                        _landingUnlockRemaining = LandingInputUnlockTime;
+                        Player.Animation.PlayLanding(speedRatio);
+                    }
+                    else
+                    {
+                        _landingRemaining = 0f;
+                        _landingUnlockRemaining = 0f;
+                        Player.Animation.PlayGrounded();
+                    }
                 }
             }
 
@@ -191,6 +289,7 @@ namespace Odyssey.Characters.Player
                     // 动作轴拥有控制权时取消蓄力，避免攻击或冲刺结束后补触发一次旧跳跃。
                     _charging = false;
                     _chargeTimer = 0f;
+                    _landingRemaining = 0f;
                 }
                 else if (input != null && input.IsJumpPressed)
                 {
@@ -224,7 +323,25 @@ namespace Odyssey.Characters.Player
                 }
 
                 ApplyGroundMovement(deltaTime);
+                UpdateLandingPresentation(input, deltaTime);
                 return StateTransition<PlayerLocomotionStateId>.None;
+            }
+
+            private void UpdateLandingPresentation(InputReader input, float deltaTime)
+            {
+                if (_landingRemaining <= 0f || !Player.MovementEnabled)
+                {
+                    return;
+                }
+
+                _landingRemaining -= deltaTime;
+                _landingUnlockRemaining -= deltaTime;
+                var hasMoveInput = input != null && input.MovementValue.sqrMagnitude > 0.04f;
+                if (_landingRemaining <= 0f || (_landingUnlockRemaining <= 0f && hasMoveInput))
+                {
+                    _landingRemaining = 0f;
+                    Player.Animation.PlayGrounded();
+                }
             }
         }
 
@@ -245,14 +362,7 @@ namespace Odyssey.Characters.Player
                     return;
                 }
 
-                if (_fallAnimationStarted)
-                {
-                    Player.Animation.PlayFall();
-                }
-                else
-                {
-                    Player.Animation.PlayJump();
-                }
+                Player.Animation.PlayAirborne(Player.VerticalVelocity);
             }
 
             public override void Exit()
@@ -268,7 +378,7 @@ namespace Odyssey.Characters.Player
                     Player.CanAirJump = false;
                     Player.VerticalVelocity = Mathf.Sqrt(-2f * Player.Gravity * Player.AirJumpHeight);
                     _fallAnimationStarted = false;
-                    Player.Animation.PlayJump();
+                    Player.Animation.PlayAirborne(Player.VerticalVelocity);
                 }
 
                 if (Player.MovementEnabled)
@@ -279,10 +389,13 @@ namespace Odyssey.Characters.Player
                     Runtime.Momentum = Vector3.Lerp(Runtime.Momentum, Vector3.zero, deltaTime * 5f);
                 }
 
-                if (Player.MovementEnabled && !_fallAnimationStarted && Player.VerticalVelocity <= 0f)
+                if (Player.MovementEnabled)
                 {
-                    _fallAnimationStarted = true;
-                    Player.Animation.PlayFall();
+                    Player.Animation.SetVerticalSpeed(Player.VerticalVelocity);
+                    if (!_fallAnimationStarted && Player.VerticalVelocity <= 0f)
+                    {
+                        _fallAnimationStarted = true;
+                    }
                 }
 
                 if (Player.MovementEnabled && Player.VerticalVelocity < 0f && TryStompEnemy())
@@ -291,7 +404,7 @@ namespace Odyssey.Characters.Player
                     Player.CanAirJump = true;
                     Player.CanAirDash = true;
                     _fallAnimationStarted = false;
-                    Player.Animation.PlayJump();
+                    Player.Animation.PlayAirborne(Player.VerticalVelocity);
                     return StateTransition<PlayerLocomotionStateId>.None;
                 }
 
@@ -355,7 +468,7 @@ namespace Odyssey.Characters.Player
             {
                 if (Player.MovementEnabled)
                 {
-                    Player.Animation.PlayFall();
+                    Player.Animation.PlayAirborne(Player.VerticalVelocity);
                 }
 
                 if (Runtime.WallNormal != Vector3.zero)

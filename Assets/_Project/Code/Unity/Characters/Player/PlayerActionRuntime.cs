@@ -104,6 +104,25 @@ namespace Odyssey.Characters.Player
         }
 
         /// <summary>
+        /// 接收动画剪辑作者标注的命中窗口，使玩法判定与真实挥击帧对齐，而不是猜测固定归一化时间。
+        /// </summary>
+        public void OpenAttackWindow()
+        {
+            if (CurrentStateId == PlayerActionStateId.Attack)
+            {
+                _attackState.SetDamageWindow(true);
+            }
+        }
+
+        public void CloseAttackWindow()
+        {
+            if (CurrentStateId == PlayerActionStateId.Attack)
+            {
+                _attackState.SetDamageWindow(false);
+            }
+        }
+
+        /// <summary>
         /// 复活时结束当前动作并清理待处理命令，保证旧的攻击命中窗口不会穿透到新生命周期。
         /// </summary>
         public void Reset()
@@ -189,11 +208,14 @@ namespace Odyssey.Characters.Player
         private sealed class AttackState : ActionState
         {
             private static readonly Collider[] HitBuffer = new Collider[16];
+            private static readonly float[] ComboCommitTimes = { 0.38f, 0.34f, 0.41f, 1f };
+            private static readonly float[] RecoveryTimes = { 0.65f, 0.65f, 0.65f, 0.72f };
             private readonly HashSet<Enemy> _damagedEnemies = new HashSet<Enemy>();
             private int _comboIndex;
             private bool _comboQueued;
-            private bool _damageApplied;
+            private bool _damageWindowOpen;
             private float _timer;
+            private Quaternion _targetFacing;
 
             public AttackState(PlayerActionRuntime runtime) : base(runtime)
             {
@@ -204,18 +226,25 @@ namespace Odyssey.Characters.Player
                 _comboQueued = true;
             }
 
+            public void SetDamageWindow(bool isOpen)
+            {
+                _damageWindowOpen = isOpen;
+            }
+
             public override void Enter()
             {
                 ClearRequest();
                 _comboIndex = 1;
                 _comboQueued = false;
-                _damageApplied = false;
+                _damageWindowOpen = false;
+                _damagedEnemies.Clear();
                 _timer = 0f;
                 Player.VerticalVelocity = 0f;
                 Player.Controller.Move(Vector3.zero);
+                Player.StopPlanarMotion();
                 Player.Animation.SetLocomotionSpeed(0f, 0f);
                 Player.Animation.PlayAttack(_comboIndex);
-                FaceCameraForward();
+                CaptureTargetFacing();
             }
 
             public override void Exit()
@@ -237,35 +266,43 @@ namespace Odyssey.Characters.Player
                 var groundStickVelocity = Player.LocomotionState == PlayerLocomotionStateId.Grounded
                     ? Vector3.up * Player.VerticalVelocity
                     : Vector3.zero;
-                Player.Controller.Move(groundStickVelocity * deltaTime);
+                var advanceVelocity = _damageWindowOpen
+                    ? Player.transform.forward * Player.AttackAdvanceSpeed
+                    : Vector3.zero;
+                Player.Controller.Move((groundStickVelocity + advanceVelocity) * deltaTime);
+                Player.transform.rotation = Quaternion.RotateTowards(
+                    Player.transform.rotation,
+                    _targetFacing,
+                    720f * deltaTime);
+
+                if (_damageWindowOpen)
+                {
+                    ApplyDamage();
+                }
+
                 var info = Player.Animator.GetCurrentAnimatorStateInfo(0);
                 var normalizedTime = _timer < 0.15f
                     ? 0f
                     : info.IsTag("Attack") ? info.normalizedTime : _timer / 0.8f;
-                if (normalizedTime >= 0.3f && !_damageApplied)
-                {
-                    ApplyDamage();
-                    _damageApplied = true;
-                }
-
-                if (normalizedTime >= 0.4f && normalizedTime < 0.9f && _comboQueued && _comboIndex < 4)
+                var comboSlot = _comboIndex - 1;
+                if (normalizedTime >= ComboCommitTimes[comboSlot] && _comboQueued && _comboIndex < 4)
                 {
                     _comboIndex++;
                     _comboQueued = false;
-                    _damageApplied = false;
+                    _damageWindowOpen = false;
+                    _damagedEnemies.Clear();
                     _timer = 0f;
                     Player.Animation.PlayAttack(_comboIndex);
                     return StateTransition<PlayerActionStateId>.None;
                 }
 
-                return normalizedTime >= 0.95f
+                return normalizedTime >= RecoveryTimes[comboSlot]
                     ? StateTransition<PlayerActionStateId>.To(PlayerActionStateId.Free)
                     : StateTransition<PlayerActionStateId>.None;
             }
 
             private void ApplyDamage()
             {
-                _damagedEnemies.Clear();
                 var center = Player.transform.position + Player.transform.forward + Vector3.up * 0.5f;
                 var count = Physics.OverlapSphereNonAlloc(
                     center,
@@ -283,19 +320,22 @@ namespace Odyssey.Characters.Player
                 }
             }
 
-            private void FaceCameraForward()
+            private void CaptureTargetFacing()
             {
-                var camera = Player.MainCameraTransform;
-                if (camera == null)
+                var direction = Player.DesiredMoveDirection;
+                if (direction == Vector3.zero && Player.MainCameraTransform != null)
                 {
-                    return;
+                    direction = Player.MainCameraTransform.forward;
                 }
 
-                var direction = camera.forward;
                 direction.y = 0f;
                 if (direction != Vector3.zero)
                 {
-                    Player.transform.forward = direction.normalized;
+                    _targetFacing = Quaternion.LookRotation(direction.normalized);
+                }
+                else
+                {
+                    _targetFacing = Player.transform.rotation;
                 }
             }
         }
@@ -313,7 +353,10 @@ namespace Odyssey.Characters.Player
             {
                 ClearRequest();
                 _remaining = Player.DashDuration;
-                _direction = Player.transform.forward;
+                _direction = Player.DesiredMoveDirection == Vector3.zero
+                    ? Player.transform.forward
+                    : Player.DesiredMoveDirection.normalized;
+                Player.StopPlanarMotion();
                 if (!Player.Controller.isGrounded)
                 {
                     Player.CanAirDash = false;
@@ -362,6 +405,7 @@ namespace Odyssey.Characters.Player
                 _knockback = Runtime._pendingKnockback;
                 ClearRequest();
                 _remaining = 0.5f;
+                Player.StopPlanarMotion();
                 Player.Animation.PlayHit();
                 Player.CanAirJump = false;
                 Player.CanAirDash = false;

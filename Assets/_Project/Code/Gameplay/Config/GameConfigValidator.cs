@@ -42,6 +42,12 @@ namespace Odyssey.Gameplay.Config
                 errors.Add("RunSpeed 必须大于或等于 WalkSpeed。");
             }
 
+            if (config.GroundAcceleration <= 0f) errors.Add("GroundAcceleration 必须大于零。");
+            if (config.GroundDeceleration <= 0f) errors.Add("GroundDeceleration 必须大于零。");
+            if (config.MinTurnSpeed <= 0f) errors.Add("MinTurnSpeed 必须大于零。");
+            if (config.MaxTurnSpeed < config.MinTurnSpeed) errors.Add("MaxTurnSpeed 不能小于 MinTurnSpeed。");
+            if (config.AttackAdvanceSpeed < 0f) errors.Add("AttackAdvanceSpeed 不能小于零。");
+
             if (config.Gravity >= 0f) errors.Add("Gravity 必须小于零。");
             if (config.DashForce <= 0f) errors.Add("DashForce 必须大于零。");
             if (config.DashDuration <= 0f) errors.Add("DashDuration 必须大于零。");

@@ -1,2 +1,2 @@
-id,walkSpeed,runSpeed,gravity,dashForce,dashDuration,dashCooldown,jumpHeight,chargeJumpHeight,minChargeTime,airJumpHeight,wallSlideSpeed,wallJumpUpForce,wallJumpSideForce,attackDamage,attackRange,attackCooldown,maxHealth
-player,6,10,-15,20,0.2,0.5,3,5,0.5,2,-3,12,10,1,2,0.5,6
+id,walkSpeed,runSpeed,gravity,dashForce,dashDuration,dashCooldown,jumpHeight,chargeJumpHeight,minChargeTime,airJumpHeight,wallSlideSpeed,wallJumpUpForce,wallJumpSideForce,attackDamage,attackRange,attackCooldown,maxHealth,groundAcceleration,groundDeceleration,minTurnSpeed,maxTurnSpeed,attackAdvanceSpeed
+player,4,8,-15,20,0.2,0.5,3,5,0.5,2,-3,12,10,1,2,0.5,6,20,25,400,1200,1.5

@@ -44,7 +44,12 @@ namespace Odyssey.Gameplay.Config
             int attackDamage = 1,
             float attackRange = 2f,
             float attackCooldown = 0.5f,
-            int maxHealth = 5)
+            int maxHealth = 5,
+            float groundAcceleration = 20f,
+            float groundDeceleration = 25f,
+            float minTurnSpeed = 400f,
+            float maxTurnSpeed = 1200f,
+            float attackAdvanceSpeed = 1.5f)
         {
             Id = id;
             WalkSpeed = walkSpeed;
@@ -64,6 +69,11 @@ namespace Odyssey.Gameplay.Config
             AttackRange = attackRange;
             AttackCooldown = attackCooldown;
             MaxHealth = maxHealth;
+            GroundAcceleration = groundAcceleration;
+            GroundDeceleration = groundDeceleration;
+            MinTurnSpeed = minTurnSpeed;
+            MaxTurnSpeed = maxTurnSpeed;
+            AttackAdvanceSpeed = attackAdvanceSpeed;
         }
 
         public string Id { get; }
@@ -84,6 +94,11 @@ namespace Odyssey.Gameplay.Config
         public float AttackRange { get; }
         public float AttackCooldown { get; }
         public int MaxHealth { get; }
+        public float GroundAcceleration { get; }
+        public float GroundDeceleration { get; }
+        public float MinTurnSpeed { get; }
+        public float MaxTurnSpeed { get; }
+        public float AttackAdvanceSpeed { get; }
     }
 
     /// <summary>

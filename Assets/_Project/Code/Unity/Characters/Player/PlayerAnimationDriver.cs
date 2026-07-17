@@ -12,14 +12,20 @@ namespace Odyssey.Characters.Player
     {
         private const float LocomotionBlendTime = 0.08f;
         private const float AirBlendTime = 0.1f;
-        private const float ActionBlendTime = 0.08f;
+        private const float LandingBlendTime = 0.05f;
+        private const float ActionBlendTime = 0.06f;
+        private const float HitBlendTime = 0.08f;
+        private const float DeathBlendTime = 0.12f;
 
         private static readonly int Speed = Animator.StringToHash("Speed");
+        private static readonly int VerticalSpeed = Animator.StringToHash("VerticalSpeed");
         private static readonly AnimatorStateId Locomotion = CreateStateId("Locomotion");
-        private static readonly AnimatorStateId JumpUp = CreateStateId("EllenJumpGoesUp");
-        private static readonly AnimatorStateId JumpDown = CreateStateId("EllenJumpGoesDown");
+        private static readonly AnimatorStateId Airborne = CreateStateId("Airborne");
+        private static readonly AnimatorStateId Landing = CreateStateId("Landing");
+        private static readonly AnimatorStateId Dash = CreateStateId("Dash");
         private static readonly AnimatorStateId Hit = CreateStateId("EllenHitFront");
         private static readonly AnimatorStateId Death = CreateStateId("EllenDeath");
+        private static readonly float[] ComboBlendTimes = { ActionBlendTime, 0.075f, 0.042f, 0.173f };
         private static readonly AnimatorStateId[] ComboStates =
         {
             CreateStateId("EllenCombo_1"),
@@ -57,12 +63,32 @@ namespace Odyssey.Characters.Player
 
         public void PlayJump()
         {
-            CrossFadeIfNeeded(JumpUp, AirBlendTime);
+            PlayAirborne(1f);
         }
 
         public void PlayFall()
         {
-            CrossFadeIfNeeded(JumpDown, AirBlendTime);
+            PlayAirborne(-1f);
+        }
+
+        /// <summary>
+        /// 使用同一个空中 BlendTree 连续表达起跳、顶点与下落，避免在速度过零时切换离散状态造成姿势跳变。
+        /// </summary>
+        public void PlayAirborne(float verticalSpeed)
+        {
+            SetVerticalSpeed(verticalSpeed);
+            CrossFadeIfNeeded(Airborne, AirBlendTime);
+        }
+
+        public void SetVerticalSpeed(float verticalSpeed)
+        {
+            _animator.SetFloat(VerticalSpeed, verticalSpeed);
+        }
+
+        public void PlayLanding(float normalizedSpeed)
+        {
+            _animator.SetFloat(Speed, Mathf.Clamp01(normalizedSpeed));
+            CrossFadeIfNeeded(Landing, LandingBlendTime);
         }
 
         /// <summary>
@@ -71,36 +97,28 @@ namespace Odyssey.Characters.Player
         public void PlayAttack(int comboIndex)
         {
             var index = Mathf.Clamp(comboIndex, 1, ComboStates.Length) - 1;
-            _animator.CrossFadeInFixedTime(ComboStates[index].FullPathHash, ActionBlendTime, 0, 0f);
+            _animator.CrossFadeInFixedTime(ComboStates[index].FullPathHash, ComboBlendTimes[index], 0, 0f);
         }
 
         public void PlayDash(PlayerLocomotionStateId locomotionState, float verticalVelocity)
         {
             if (locomotionState == PlayerLocomotionStateId.Grounded)
             {
-                PlayGrounded();
-                _animator.SetFloat(Speed, 1f);
+                _animator.CrossFadeInFixedTime(Dash.FullPathHash, ActionBlendTime, 0, 0f);
                 return;
             }
 
-            if (verticalVelocity > 0f)
-            {
-                PlayJump();
-            }
-            else
-            {
-                PlayFall();
-            }
+            PlayAirborne(verticalVelocity);
         }
 
         public void PlayHit()
         {
-            _animator.CrossFadeInFixedTime(Hit.FullPathHash, ActionBlendTime, 0, 0f);
+            _animator.CrossFadeInFixedTime(Hit.FullPathHash, HitBlendTime, 0, 0f);
         }
 
         public void PlayDeath()
         {
-            _animator.CrossFadeInFixedTime(Death.FullPathHash, ActionBlendTime, 0, 0f);
+            _animator.CrossFadeInFixedTime(Death.FullPathHash, DeathBlendTime, 0, 0f);
         }
 
         /// <summary>
@@ -114,18 +132,10 @@ namespace Odyssey.Characters.Player
                     PlayGrounded();
                     break;
                 case PlayerLocomotionStateId.WallSlide:
-                    PlayFall();
+                    PlayAirborne(verticalVelocity);
                     break;
                 default:
-                    if (verticalVelocity > 0f)
-                    {
-                        PlayJump();
-                    }
-                    else
-                    {
-                        PlayFall();
-                    }
-
+                    PlayAirborne(verticalVelocity);
                     break;
             }
         }
