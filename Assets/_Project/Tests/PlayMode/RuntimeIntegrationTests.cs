@@ -55,6 +55,14 @@ namespace Odyssey.Tests.PlayMode
             Assert.That(heartContainer.transform.childCount, Is.EqualTo(6), "血量图标池未扩容到六格");
             Assert.That((player.WallLayer.value & (1 << 16)) != 0, Is.True,
                 "玩家未配置关卡墙面层，墙滑和墙跳分支不可达");
+            Assert.That((player.GroundLayer.value & (1 << 16)) != 0, Is.True,
+                "玩家未配置关卡地面层，斜坡投影和脚部贴地不可用");
+            Assert.That(player.WalkSpeed, Is.EqualTo(4f));
+            Assert.That(player.RunSpeed, Is.EqualTo(8f));
+            Assert.That(player.Controller.center.y, Is.EqualTo(0.901f).Within(0.001f));
+            Assert.That(player.Controller.skinWidth, Is.EqualTo(0.035f).Within(0.001f));
+            Assert.That(player.GetComponent<Odyssey.Characters.Player.PlayerFootPlacementController>(), Is.Not.Null,
+                "玩家 Prefab 缺少脚部贴地控制器");
 
             yield return null;
         }
@@ -155,6 +163,95 @@ namespace Odyssey.Tests.PlayMode
         }
 
         [UnityTest]
+        public IEnumerator PlayerMovement_AcceleratesAndDeceleratesInsteadOfJumpingToFullSpeed()
+        {
+            var player = Object.FindFirstObjectByType<PlayerController>();
+            Assert.That(player, Is.Not.Null, "场景中未找到玩家");
+
+            SetMovementValue(player, Vector2.up);
+            yield return null;
+            var firstFrameSpeed = player.CurrentPlanarSpeed;
+            Assert.That(firstFrameSpeed, Is.GreaterThan(0f));
+            Assert.That(firstFrameSpeed, Is.LessThan(player.WalkSpeed), "玩家首帧直接跳到了完整步行速度");
+
+            yield return new WaitForSeconds(0.3f);
+            Assert.That(player.CurrentPlanarSpeed, Is.EqualTo(player.WalkSpeed).Within(0.15f));
+
+            SetMovementValue(player, Vector2.zero);
+            yield return null;
+            Assert.That(player.CurrentPlanarSpeed, Is.GreaterThan(0f), "松开输入后速度被瞬间清零");
+            yield return new WaitForSeconds(0.25f);
+            Assert.That(player.CurrentPlanarSpeed, Is.EqualTo(0f).Within(0.05f));
+        }
+
+        [UnityTest]
+        public IEnumerator PlayerAttack_AnimationWindowDamagesEachEnemyOnlyOnce()
+        {
+            var player = Object.FindFirstObjectByType<PlayerController>();
+            Assert.That(player, Is.Not.Null, "场景中未找到玩家");
+
+            var enemyObject = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            enemyObject.name = "动画命中窗口测试敌人";
+            enemyObject.layer = 23;
+            enemyObject.transform.position = player.transform.position + player.transform.forward * 1.2f + Vector3.up * 0.5f;
+            var enemy = enemyObject.AddComponent<Enemy>();
+
+            InvokePlayerCommand(player, "HandleAttackRequested");
+            yield return null;
+            player.MeleeAttackStart();
+            yield return null;
+            Assert.That(enemy.CurrentHealth, Is.EqualTo(2), "动画命中窗口未造成一次伤害");
+
+            player.MeleeAttackStart();
+            yield return null;
+            Assert.That(enemy.CurrentHealth, Is.EqualTo(2), "同一段攻击对同一敌人重复结算了伤害");
+            player.MeleeAttackEnd();
+
+            Object.Destroy(enemyObject);
+            yield return null;
+        }
+
+        [UnityTest]
+        public IEnumerator PlayerFootPlacement_OnlyOwnsGroundedFreePresentation()
+        {
+            var player = Object.FindFirstObjectByType<PlayerController>();
+            var placement = player == null
+                ? null
+                : player.GetComponent<Odyssey.Characters.Player.PlayerFootPlacementController>();
+            Assert.That(placement, Is.Not.Null, "玩家缺少脚部贴地控制器");
+
+            yield return new WaitForSeconds(0.15f);
+            Assert.That(placement.CurrentWeight, Is.GreaterThan(0.9f), "地面空闲时脚部 Rig 未启用");
+
+            InvokePlayerCommand(player, "HandleAttackRequested");
+            yield return new WaitForSeconds(0.15f);
+            Assert.That(placement.CurrentWeight, Is.LessThan(0.1f), "攻击期间脚部 Rig 仍在覆盖动作姿势");
+        }
+
+        [UnityTest]
+        public IEnumerator PlayerWallClearance_PushesIdleSilhouetteOutOfWall()
+        {
+            var player = Object.FindFirstObjectByType<PlayerController>();
+            Assert.That(player, Is.Not.Null, "场景中未找到玩家");
+
+            var wall = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            wall.name = "墙边安全半径测试墙";
+            wall.layer = 16;
+            wall.transform.localScale = new Vector3(0.1f, 3f, 3f);
+            wall.transform.position = player.transform.position + player.transform.right * 0.5f + Vector3.up;
+            var distanceBefore = Vector3.Distance(player.transform.position, wall.transform.position);
+
+            yield return null;
+            var distanceAfter = Vector3.Distance(player.transform.position, wall.transform.position);
+            Assert.That(player.WallClearanceActive, Is.True, "墙面进入安全半径后未激活常态保护");
+            Assert.That(distanceAfter, Is.GreaterThan(distanceBefore + 0.005f),
+                "常态墙边保护未把 Ellen 手臂轮廓推出墙面");
+
+            Object.Destroy(wall);
+            yield return null;
+        }
+
+        [UnityTest]
         public IEnumerator PlayerAnimator_DrivesJumpApexAndFallWithoutTransitions()
         {
             var player = Object.FindFirstObjectByType<PlayerController>();
@@ -169,13 +266,16 @@ namespace Odyssey.Tests.PlayMode
 
             Assert.That(player.LocomotionState,
                 Is.EqualTo(Odyssey.Gameplay.Characters.PlayerLocomotionStateId.Airborne));
-            AssertAnimatorState(player.Animator, "EllenJumpGoesUp");
+            AssertAnimatorState(player.Animator, "Airborne");
+            Assert.That(player.Animator.GetFloat("VerticalSpeed"), Is.GreaterThan(0f));
 
             player.VerticalVelocity = -1f;
             yield return null;
             yield return new WaitForFixedUpdate();
-            AssertAnimatorState(player.Animator, "EllenJumpGoesDown");
+            AssertAnimatorState(player.Animator, "Airborne");
+            Assert.That(player.Animator.GetFloat("VerticalSpeed"), Is.LessThan(0f));
 
+            player.VerticalVelocity = -8f;
             SetJumpPressed(player, false);
             for (var frame = 0;
                  frame < 180 &&
@@ -188,7 +288,9 @@ namespace Odyssey.Tests.PlayMode
             Assert.That(player.LocomotionState,
                 Is.EqualTo(Odyssey.Gameplay.Characters.PlayerLocomotionStateId.Grounded),
                 "玩家落地后仍停留在空中移动状态");
-            yield return new WaitForFixedUpdate();
+            yield return null;
+            AssertAnimatorState(player.Animator, "Landing");
+            yield return new WaitForSeconds(0.4f);
             AssertAnimatorState(player.Animator, "Locomotion");
         }
 
@@ -265,6 +367,15 @@ namespace Odyssey.Tests.PlayMode
                 BindingFlags.Instance | BindingFlags.NonPublic);
             Assert.That(field, Is.Not.Null, "输入适配器的跳跃快照字段不存在");
             field.SetValue(player.InputReader, pressed);
+        }
+
+        private static void SetMovementValue(PlayerController player, Vector2 value)
+        {
+            var field = player.InputReader.GetType().GetField(
+                "<MovementValue>k__BackingField",
+                BindingFlags.Instance | BindingFlags.NonPublic);
+            Assert.That(field, Is.Not.Null, "输入适配器的移动快照字段不存在");
+            field.SetValue(player.InputReader, value);
         }
 
         private static void InvokePlayerCommand(PlayerController player, string methodName)

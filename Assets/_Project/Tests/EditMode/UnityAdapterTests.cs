@@ -16,6 +16,7 @@ using UnityEngine;
 using UnityEngine.UI;
 using UnityEditor;
 using UnityEditor.Animations;
+using UnityEngine.Animations.Rigging;
 
 namespace Odyssey.Tests
 {
@@ -183,7 +184,12 @@ namespace Odyssey.Tests
                 gravity = -18f,
                 dashForce = 22f,
                 attackDamage = 2,
-                maxHealth = 6
+                maxHealth = 6,
+                groundAcceleration = 20f,
+                groundDeceleration = 25f,
+                minTurnSpeed = 400f,
+                maxTurnSpeed = 1200f,
+                attackAdvanceSpeed = 1.5f
             };
 
             var data = entry.ToData();
@@ -192,6 +198,9 @@ namespace Odyssey.Tests
             Assert.That(data.DashForce, Is.EqualTo(22f));
             Assert.That(data.AttackDamage, Is.EqualTo(2));
             Assert.That(data.MaxHealth, Is.EqualTo(6));
+            Assert.That(data.GroundAcceleration, Is.EqualTo(20f));
+            Assert.That(data.MaxTurnSpeed, Is.EqualTo(1200f));
+            Assert.That(data.AttackAdvanceSpeed, Is.EqualTo(1.5f));
         }
 
         [Test]
@@ -201,10 +210,12 @@ namespace Odyssey.Tests
             var controller = AssetDatabase.LoadAssetAtPath<AnimatorController>(path);
 
             Assert.That(controller, Is.Not.Null, "未找到玩家 Animator Controller");
-            Assert.That(controller.parameters.Length, Is.EqualTo(1),
+            Assert.That(controller.parameters.Length, Is.EqualTo(2),
                 "代码驱动动画不应继续保留旧 Trigger、Bool 或连击参数");
-            Assert.That(controller.parameters[0].name, Is.EqualTo("Speed"));
-            Assert.That(controller.parameters[0].type, Is.EqualTo(AnimatorControllerParameterType.Float));
+            Assert.That(System.Array.Exists(controller.parameters, parameter =>
+                parameter.name == "Speed" && parameter.type == AnimatorControllerParameterType.Float), Is.True);
+            Assert.That(System.Array.Exists(controller.parameters, parameter =>
+                parameter.name == "VerticalSpeed" && parameter.type == AnimatorControllerParameterType.Float), Is.True);
 
             var stateMachine = controller.layers[0].stateMachine;
             Assert.That(stateMachine.anyStateTransitions, Is.Empty,
@@ -217,7 +228,7 @@ namespace Odyssey.Tests
 
             foreach (var required in new[]
                      {
-                         "Locomotion", "EllenJumpGoesUp", "EllenJumpGoesDown",
+                         "Locomotion", "Airborne", "Landing", "Dash",
                          "EllenCombo_1", "EllenCombo_2", "EllenCombo_3", "EllenCombo_4",
                          "EllenHitFront", "EllenDeath"
                      })
@@ -230,6 +241,57 @@ namespace Odyssey.Tests
                 Assert.That(child.state.transitions, Is.Empty,
                     $"状态 {child.state.name} 仍保留与代码驱动重复的旧过渡");
             }
+
+            var locomotion = System.Array.Find(stateMachine.states, child => child.state.name == "Locomotion").state;
+            var locomotionTree = locomotion.motion as BlendTree;
+            Assert.That(locomotionTree, Is.Not.Null, "移动状态未使用 BlendTree");
+            Assert.That(locomotionTree.children.Length, Is.EqualTo(3), "移动混合应包含待机、步行和跑步");
+            Assert.That(locomotionTree.children[0].threshold, Is.EqualTo(0f));
+            Assert.That(locomotionTree.children[1].threshold, Is.EqualTo(0.5f));
+            Assert.That(locomotionTree.children[2].threshold, Is.EqualTo(1f));
+
+            var airborne = System.Array.Find(stateMachine.states, child => child.state.name == "Airborne").state;
+            Assert.That((airborne.motion as BlendTree)?.children.Length, Is.EqualTo(6),
+                "空中混合应覆盖起跳、上升、顶点和下落六段姿势");
+        }
+
+        [Test]
+        public void PlayerMovementMath_ProjectsDirectionOntoSlopeWithoutChangingMagnitude()
+        {
+            var normal = Quaternion.Euler(30f, 0f, 0f) * Vector3.up;
+
+            var projected = Odyssey.Characters.Player.PlayerMovementMath.ProjectDirectionOnGround(
+                Vector3.forward,
+                normal);
+
+            Assert.That(Vector3.Dot(projected, normal), Is.EqualTo(0f).Within(0.0001f));
+            Assert.That(projected.magnitude, Is.EqualTo(1f).Within(0.0001f));
+        }
+
+        [Test]
+        public void EllenPrefab_UsesCalibratedControllerAndCompleteFootRig()
+        {
+            const string path = "Assets/_Project/Content/Prefabs/Characters/Ellen.prefab";
+            var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(path);
+            Assert.That(prefab, Is.Not.Null, "未找到 Ellen Prefab");
+
+            var animator = prefab.GetComponent<Animator>();
+            var controller = prefab.GetComponent<CharacterController>();
+            var rigBuilder = prefab.GetComponent<RigBuilder>();
+            var placement = prefab.GetComponent<Odyssey.Characters.Player.PlayerFootPlacementController>();
+
+            Assert.That(animator.updateMode, Is.EqualTo(AnimatorUpdateMode.Normal));
+            Assert.That(animator.applyRootMotion, Is.False);
+            Assert.That(controller.height, Is.EqualTo(1.8f).Within(0.001f));
+            Assert.That(controller.center.y, Is.EqualTo(0.901f).Within(0.001f));
+            Assert.That(controller.radius, Is.EqualTo(0.42f).Within(0.001f));
+            Assert.That(controller.skinWidth, Is.EqualTo(0.035f).Within(0.001f));
+            Assert.That(rigBuilder, Is.Not.Null, "Prefab 缺少 RigBuilder");
+            Assert.That(rigBuilder.layers.Count, Is.EqualTo(1), "脚部 RigLayer 数量错误");
+            Assert.That(placement, Is.Not.Null, "Prefab 缺少脚部贴地控制器");
+            Assert.That(prefab.GetComponentsInChildren<TwoBoneIKConstraint>(true).Length, Is.EqualTo(2));
+            Assert.That(prefab.GetComponentInChildren<OverrideTransform>(true), Is.Not.Null,
+                "Prefab 缺少骨盆补偿约束");
         }
 
         [Test]

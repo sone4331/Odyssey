@@ -6,6 +6,7 @@
     "Odyssey.Gameplay",
     "Odyssey.Unity",
     "Odyssey.Editor",
+    "Unity.Animation.Rigging",
     "Unity.ugui"
   ],
   "includePlatforms": [

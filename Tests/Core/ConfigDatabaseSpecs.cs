@@ -10,6 +10,7 @@ internal static class ConfigDatabaseSpecs
         Spec.Run("玩家配置拒绝非正数速度", PlayerConfigRejectsNonPositiveSpeed);
         Spec.Run("玩家配置保存完整战斗参数", PlayerConfigStoresCompleteCombatValues);
         Spec.Run("玩家配置拒绝非法战斗参数", PlayerConfigRejectsInvalidCombatValues);
+        Spec.Run("玩家配置拒绝非法手感参数", PlayerConfigRejectsInvalidFeelValues);
         Spec.Run("敌人配置拒绝超过追击范围的攻击范围", EnemyConfigRejectsAttackRangeBeyondChaseRange);
         Spec.Run("敌人配置保存完整战斗参数", EnemyConfigStoresCompleteCombatValues);
         Spec.Run("敌人配置拒绝非法战斗参数", EnemyConfigRejectsInvalidCombatValues);
@@ -57,7 +58,12 @@ internal static class ConfigDatabaseSpecs
             attackDamage: 2,
             attackRange: 2.2f,
             attackCooldown: 0.45f,
-            maxHealth: 6);
+            maxHealth: 6,
+            groundAcceleration: 20f,
+            groundDeceleration: 25f,
+            minTurnSpeed: 400f,
+            maxTurnSpeed: 1200f,
+            attackAdvanceSpeed: 1.5f);
 
         Spec.Equal(-18f, config.Gravity, "重力参数未被保存");
         Spec.Equal(22f, config.DashForce, "冲刺力度参数未被保存");
@@ -65,6 +71,9 @@ internal static class ConfigDatabaseSpecs
         Spec.Equal(9f, config.WallJumpSideForce, "墙跳侧向力度参数未被保存");
         Spec.Equal(2, config.AttackDamage, "攻击伤害参数未被保存");
         Spec.Equal(6, config.MaxHealth, "最大生命参数未被保存");
+        Spec.Equal(20f, config.GroundAcceleration, "地面加速度参数未被保存");
+        Spec.Equal(1200f, config.MaxTurnSpeed, "最大转向速度参数未被保存");
+        Spec.Equal(1.5f, config.AttackAdvanceSpeed, "攻击前移速度参数未被保存");
     }
 
     private static void PlayerConfigRejectsInvalidCombatValues()
@@ -78,6 +87,21 @@ internal static class ConfigDatabaseSpecs
         var result = GameConfigValidator.Validate(config);
 
         Spec.True(!result.IsValid, "非法战斗参数被错误接受");
+    }
+
+    private static void PlayerConfigRejectsInvalidFeelValues()
+    {
+        var config = new PlayerConfigData(
+            "player", 4f, 8f,
+            groundAcceleration: 0f,
+            groundDeceleration: -1f,
+            minTurnSpeed: 800f,
+            maxTurnSpeed: 400f,
+            attackAdvanceSpeed: -1f);
+
+        var result = GameConfigValidator.Validate(config);
+
+        Spec.True(!result.IsValid, "非法移动手感参数被错误接受");
     }
 
     private static void EnemyConfigRejectsAttackRangeBeyondChaseRange()

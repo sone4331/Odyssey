@@ -71,6 +71,8 @@ Locomotion 使用延迟提交 FSM：状态只返回转移意图，状态机在 `
 
 `PlayerController` 是角色级组合根与兼容门面；`PlayerLocomotionRuntime` 和 `PlayerActionRuntime` 是每个玩家实例独享的运行时对象，不是全局 Manager 或单例。所有状态在构造时缓存复用，攻击命中使用 NonAlloc 查询缓冲区，避免主循环因状态切换和物理查询持续产生托管分配。
 
+角色位置由 CharacterController 和状态机唯一写入，Animator 关闭 Root Motion，只消费平面速度、垂直速度和离散动作命令。Generic Ellen 的 Animation Rigging 只在最终骨骼姿势阶段处理双脚和骨盆贴坡，不回写角色位置、碰撞或玩法状态。这条“玩法权威与表现修正分离”的边界既便于自动测试，也能直接复用于后续 Host 权威状态同步。
+
 ## 渐进迁移约束
 
 1. 每个模块先增加失败规格，再实现最小行为。
