@@ -264,6 +264,15 @@ namespace Odyssey.Characters.Player
         }
 
         /// <summary>
+        /// 在冲刺正常结束时把最大奔跑速度交还给移动轴，避免动作轴直接修改移动状态内部字段。
+        /// 该入口只负责正交状态机之间的边界协调，不改变普通移动、攻击或受击的起步规则。
+        /// </summary>
+        internal void ResumePlanarMotionAtMaximumSpeed(Vector3 dashDirection)
+        {
+            _locomotion?.ResumeAtMaximumSpeed(dashDirection);
+        }
+
+        /// <summary>
         /// 为存档和调试工具提供统一生命设置入口，禁止外部直接改写序列化字段。
         /// </summary>
         public void SetHealth(int value, string sourceId = "external")

@@ -368,6 +368,12 @@ namespace Odyssey.Characters.Player
             public override void Exit()
             {
                 Player.EndAbility(PlayerController.DashAbilityId);
+                if (Player.InputReader != null && Player.InputReader.MovementValue.sqrMagnitude > 0.01f)
+                {
+                    // 玩家仍保持方向时让移动轴以奔跑上限接管，消除冲刺结束后从零重新加速的顿挫。
+                    Player.ResumePlanarMotionAtMaximumSpeed(_direction);
+                }
+
                 Player.Animation.Recover(Player.LocomotionState, Player.VerticalVelocity);
             }
 

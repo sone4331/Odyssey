@@ -24,6 +24,7 @@ namespace Odyssey.Characters.Player
         private float _currentPlanarSpeed;
         private Vector3 _desiredMoveDirection;
         private float _groundSlopeAngle;
+        private bool _preserveRunSpeedUntilInputReleased;
 
         public PlayerLocomotionRuntime(PlayerController player)
         {
@@ -77,6 +78,7 @@ namespace Odyssey.Characters.Player
             _currentPlanarSpeed = 0f;
             _desiredMoveDirection = Vector3.zero;
             _groundSlopeAngle = 0f;
+            _preserveRunSpeedUntilInputReleased = false;
             _machine.Reset(PlayerLocomotionStateId.Grounded);
         }
 
@@ -87,6 +89,21 @@ namespace Odyssey.Characters.Player
         {
             _currentPlanarSpeed = 0f;
             _desiredMoveDirection = Vector3.zero;
+            _preserveRunSpeedUntilInputReleased = false;
+        }
+
+        /// <summary>
+        /// 冲刺结束且玩家仍保持方向输入时，以奔跑上限把位移权交还给移动轴。
+        /// 采用短生命周期速度继承而非修改基础加速度：持续按住方向保持奔跑，松开后立即恢复普通 Walk/Run 规则。
+        /// </summary>
+        public void ResumeAtMaximumSpeed(Vector3 dashDirection)
+        {
+            _currentPlanarSpeed = _player.RunSpeed;
+            _desiredMoveDirection = dashDirection.sqrMagnitude > 0.0001f
+                ? dashDirection.normalized
+                : _player.transform.forward;
+            _preserveRunSpeedUntilInputReleased = true;
+            _player.Animation.SetLocomotionSpeed(1f, 0f);
         }
 
         private abstract class LocomotionState : IState<PlayerLocomotionStateId>
@@ -135,9 +152,14 @@ namespace Odyssey.Characters.Player
                 }
 
                 Runtime._desiredMoveDirection = direction;
-                var maximumSpeed = (Player.InputReader != null && Player.InputReader.IsSprinting
-                    ? Player.RunSpeed
-                    : Player.WalkSpeed) * speedMultiplier;
+                if (input.sqrMagnitude <= 0.0001f)
+                {
+                    Runtime._preserveRunSpeedUntilInputReleased = false;
+                }
+
+                var shouldRun = Player.InputReader != null && Player.InputReader.IsSprinting ||
+                                Runtime._preserveRunSpeedUntilInputReleased;
+                var maximumSpeed = (shouldRun ? Player.RunSpeed : Player.WalkSpeed) * speedMultiplier;
                 var targetSpeed = input.magnitude * maximumSpeed;
                 var acceleration = targetSpeed > Runtime._currentPlanarSpeed
                     ? Player.GroundAcceleration

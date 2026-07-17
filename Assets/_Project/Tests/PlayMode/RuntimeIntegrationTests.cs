@@ -164,7 +164,7 @@ namespace Odyssey.Tests.PlayMode
         }
 
         [UnityTest]
-        public IEnumerator PlayerMovement_AcceleratesAndDeceleratesInsteadOfJumpingToFullSpeed()
+        public IEnumerator PlayerMovement_SmoothlyChangesSpeedAndPreservesRunSpeedAfterDash()
         {
             var player = Object.FindFirstObjectByType<PlayerController>();
             Assert.That(player, Is.Not.Null, "场景中未找到玩家");
@@ -183,6 +183,26 @@ namespace Odyssey.Tests.PlayMode
             Assert.That(player.CurrentPlanarSpeed, Is.GreaterThan(0f), "松开输入后速度被瞬间清零");
             yield return new WaitForSeconds(0.25f);
             Assert.That(player.CurrentPlanarSpeed, Is.EqualTo(0f).Within(0.05f));
+
+            SetMovementValue(player, Vector2.up);
+            yield return null;
+            InvokePlayerCommand(player, "HandleDashRequested");
+            yield return null;
+            Assert.That(player.ActionState,
+                Is.EqualTo(Odyssey.Gameplay.Characters.PlayerActionStateId.Dash),
+                "保持方向时未进入冲刺动作");
+
+            yield return new WaitForSeconds(player.DashDuration + 0.05f);
+            Assert.That(player.ActionState,
+                Is.EqualTo(Odyssey.Gameplay.Characters.PlayerActionStateId.Free),
+                "冲刺时长结束后动作轴未恢复自由状态");
+            Assert.That(player.CurrentPlanarSpeed, Is.EqualTo(player.RunSpeed).Within(0.15f),
+                "冲刺结束且保持方向时没有直接继承最大奔跑速度");
+
+            SetMovementValue(player, Vector2.zero);
+            yield return new WaitForSeconds(0.4f);
+            Assert.That(player.CurrentPlanarSpeed, Is.EqualTo(0f).Within(0.05f),
+                "冲刺速度继承在松开方向后没有恢复普通减速规则");
         }
 
         [UnityTest]
