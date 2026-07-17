@@ -289,7 +289,16 @@ namespace Odyssey.Tests
             Assert.That(rigBuilder, Is.Not.Null, "Prefab 缺少 RigBuilder");
             Assert.That(rigBuilder.layers.Count, Is.EqualTo(1), "脚部 RigLayer 数量错误");
             Assert.That(placement, Is.Not.Null, "Prefab 缺少脚部贴地控制器");
-            Assert.That(prefab.GetComponentsInChildren<TwoBoneIKConstraint>(true).Length, Is.EqualTo(2));
+            var footConstraints = prefab.GetComponentsInChildren<TwoBoneIKConstraint>(true);
+            Assert.That(footConstraints.Length, Is.EqualTo(2));
+            foreach (var constraint in footConstraints)
+            {
+                Assert.That(constraint.data.targetPositionWeight, Is.EqualTo(1f),
+                    $"{constraint.name} 未启用脚掌位置修正");
+                Assert.That(constraint.data.targetRotationWeight, Is.EqualTo(0f),
+                    $"{constraint.name} 不应覆盖 Generic 脚骨旋转");
+            }
+
             Assert.That(prefab.GetComponentInChildren<OverrideTransform>(true), Is.Not.Null,
                 "Prefab 缺少骨盆补偿约束");
         }

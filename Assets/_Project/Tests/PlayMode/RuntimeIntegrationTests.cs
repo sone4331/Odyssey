@@ -7,6 +7,7 @@ using Odyssey.Gameplay.AI;
 using Odyssey.Systems;
 using Odyssey.Unity.UI;
 using UnityEngine;
+using UnityEngine.Animations.Rigging;
 using UnityEngine.SceneManagement;
 using UnityEngine.TestTools;
 
@@ -222,6 +223,27 @@ namespace Odyssey.Tests.PlayMode
 
             yield return new WaitForSeconds(0.15f);
             Assert.That(placement.CurrentWeight, Is.GreaterThan(0.9f), "地面空闲时脚部 Rig 未启用");
+
+            var bones = player.GetComponentsInChildren<Transform>(true);
+            var leftFoot = System.Array.Find(bones, transform => transform.name == "Ellen_Left_Foot");
+            var rightFoot = System.Array.Find(bones, transform => transform.name == "Ellen_Right_Foot");
+            Assert.That(leftFoot, Is.Not.Null, "未找到 Ellen 左脚骨骼");
+            Assert.That(rightFoot, Is.Not.Null, "未找到 Ellen 右脚骨骼");
+            Assert.That(Vector3.Distance(leftFoot.position, rightFoot.position), Is.GreaterThan(0.4f),
+                "脚部 Target 把双腿向身体中心拉拢，站立姿势已经变形");
+
+            foreach (var constraint in player.GetComponentsInChildren<TwoBoneIKConstraint>(true))
+            {
+                Assert.That(constraint.data.targetRotationWeight, Is.EqualTo(0f),
+                    $"{constraint.name} 仍在覆盖 Generic 脚骨旋转");
+            }
+
+            SetMovementValue(player, Vector2.up);
+            yield return new WaitForSeconds(0.2f);
+            Assert.That(placement.CurrentWeight, Is.LessThan(0.1f), "移动期间脚部 Rig 仍在锁死走跑动画");
+            SetMovementValue(player, Vector2.zero);
+            yield return new WaitForSeconds(0.35f);
+            Assert.That(placement.CurrentWeight, Is.GreaterThan(0.9f), "停止移动后脚部 Rig 未恢复站立贴地");
 
             InvokePlayerCommand(player, "HandleAttackRequested");
             yield return new WaitForSeconds(0.15f);

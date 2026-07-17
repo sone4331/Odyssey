@@ -52,7 +52,7 @@ namespace Odyssey.Characters.Player
                         continue;
                     }
 
-                    var closest = collider.ClosestPoint(sampleCenter);
+                    var closest = GetClosestPointWithoutPhysicsWarning(collider, sampleCenter);
                     var separation = sampleCenter - closest;
                     var distance = separation.magnitude;
                     if (distance <= 0.0001f || distance >= VisualRadius)
@@ -80,6 +80,21 @@ namespace Odyssey.Characters.Player
             }
 
             return horizontal + Vector3.ClampMagnitude(correction, MaximumCorrection) + vertical;
+        }
+
+        /// <summary>
+        /// Unity 的 Collider.ClosestPoint 不支持 TerrainCollider 和非凸 MeshCollider。
+        /// 对这两类关卡碰撞体退化为包围盒查询，避免墙边保护在每帧产生引擎警告。
+        /// </summary>
+        private static Vector3 GetClosestPointWithoutPhysicsWarning(Collider collider, Vector3 point)
+        {
+            if (collider is BoxCollider || collider is SphereCollider || collider is CapsuleCollider ||
+                collider is MeshCollider meshCollider && meshCollider.convex)
+            {
+                return collider.ClosestPoint(point);
+            }
+
+            return collider.bounds.ClosestPoint(point);
         }
     }
 }
