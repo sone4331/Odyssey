@@ -14,6 +14,26 @@ internal static class ConfigDatabaseSpecs
         Spec.Run("敌人配置拒绝超过追击范围的攻击范围", EnemyConfigRejectsAttackRangeBeyondChaseRange);
         Spec.Run("敌人配置保存完整战斗参数", EnemyConfigStoresCompleteCombatValues);
         Spec.Run("敌人配置拒绝非法战斗参数", EnemyConfigRejectsInvalidCombatValues);
+        Spec.Run("远程敌人配置保存射程与投射物参数", RangedEnemyConfigStoresProjectileValues);
+    }
+
+    private static void RangedEnemyConfigStoresProjectileValues()
+    {
+        var config = new EnemyConfigData(
+            "spitter",
+            12f,
+            8f,
+            attackMode: EnemyAttackMode.Projectile,
+            minimumAttackRange: 3.5f,
+            projectileSpeed: 12f,
+            attackWindup: 0.55f);
+
+        var validation = GameConfigValidator.Validate(config);
+
+        Spec.True(validation.IsValid, "合法远程敌人配置被错误拒绝");
+        Spec.Equal(EnemyAttackMode.Projectile, config.AttackMode, "攻击方式未被配置保存");
+        Spec.Equal(3.5f, config.MinimumAttackRange, "最小安全距离未被配置保存");
+        Spec.Equal(12f, config.ProjectileSpeed, "投射物速度未被配置保存");
     }
 
     private static void ConfigDatabaseRejectsDuplicateIds()

@@ -1,6 +1,8 @@
 using Odyssey.Gameplay.AI;
 using UnityEngine;
 using UnityEngine.AI;
+using Odyssey.Gameplay.Config;
+using System;
 
 namespace Odyssey.Characters.Enemies
 {
@@ -17,6 +19,12 @@ namespace Odyssey.Characters.Enemies
         private float _lastAttackTime = float.NegativeInfinity;
         private float _lockRemaining;
         private float _retreatRefreshRemaining;
+        private EnemyAttackMode _attackMode;
+        private float _attackWindup;
+        private float _pendingShotRemaining;
+        private Vector3 _pendingTargetPosition;
+        private Action<Vector3> _launchProjectile;
+        private Action<bool> _setTelegraph;
 
         public EnemyActionRuntime(Transform owner, Animator animator, NavMeshAgent agent)
         {
@@ -31,6 +39,23 @@ namespace Odyssey.Characters.Enemies
         }
 
         /// <summary>
+        /// 注入当前配置选择的攻击执行方式；远程攻击通过委托回到 Enemy 创建场景对象，动作层只维护前摇时序。
+        /// 这是一种轻量 Strategy 边界，避免为仅有两种攻击方式建立通用技能节点框架。
+        /// </summary>
+        public void ConfigureAttack(
+            EnemyAttackMode attackMode,
+            float attackWindup,
+            Action<Vector3> launchProjectile,
+            Action<bool> setTelegraph)
+        {
+            _attackMode = attackMode;
+            _attackWindup = Mathf.Max(0f, attackWindup);
+            _launchProjectile = launchProjectile;
+            _setTelegraph = setTelegraph;
+            _pendingShotRemaining = -1f;
+        }
+
+        /// <summary>
         /// 推进受击或攻击动作锁；锁定期间停止导航并跳过 Utility 决策，保证动画不会被每帧目标选择覆盖。
         /// </summary>
         public bool TickLock(float deltaTime)
@@ -41,6 +66,7 @@ namespace Odyssey.Characters.Enemies
             }
 
             _lockRemaining -= deltaTime;
+            TickPendingProjectile(deltaTime);
             StopNavigation();
             return true;
         }
@@ -71,13 +97,17 @@ namespace Odyssey.Characters.Enemies
 
         public void NotifyHit()
         {
+            CancelPendingProjectile();
             _lockRemaining = 0.5f;
             StopNavigation();
-            PlayAnimation("Hit" + Random.Range(1, 5), 0.06f);
+            PlayAnimation(_attackMode == EnemyAttackMode.Projectile
+                ? "TopHit"
+                : "Hit" + UnityEngine.Random.Range(1, 5), 0.06f);
         }
 
         public void DisableNavigation()
         {
+            CancelPendingProjectile();
             if (_agent != null)
             {
                 _agent.enabled = false;
@@ -100,7 +130,7 @@ namespace Odyssey.Characters.Enemies
 
             _agent.isStopped = false;
             _agent.SetDestination(target.position);
-            PlayAnimation("Run", 0.12f);
+            PlayAnimation(_attackMode == EnemyAttackMode.Projectile ? "Fleeing" : "Run", 0.12f);
         }
 
         private void Attack(Transform target, float currentTime, float cooldown)
@@ -120,7 +150,14 @@ namespace Odyssey.Characters.Enemies
             }
 
             _lastAttackTime = currentTime;
-            _lockRemaining = 1.2f;
+            _lockRemaining = Mathf.Max(1.2f, _attackWindup + 0.35f);
+            if (_attackMode == EnemyAttackMode.Projectile)
+            {
+                _pendingTargetPosition = target.position + Vector3.up * 0.75f;
+                _pendingShotRemaining = _attackWindup;
+                _setTelegraph?.Invoke(true);
+            }
+
             PlayAnimation("Attack", 0.08f);
         }
 
@@ -155,7 +192,7 @@ namespace Odyssey.Characters.Enemies
                 }
             }
 
-            PlayAnimation("Run", 0.12f);
+            PlayAnimation(_attackMode == EnemyAttackMode.Projectile ? "Fleeing" : "Run", 0.12f);
         }
 
         private bool CanNavigate()
@@ -183,6 +220,30 @@ namespace Odyssey.Characters.Enemies
 
             _animator.CrossFadeInFixedTime(stateName, transitionDuration, 0);
             _currentAnimation = stateName;
+        }
+
+        private void TickPendingProjectile(float deltaTime)
+        {
+            if (_attackMode != EnemyAttackMode.Projectile || _pendingShotRemaining < 0f)
+            {
+                return;
+            }
+
+            _pendingShotRemaining -= deltaTime;
+            if (_pendingShotRemaining > 0f)
+            {
+                return;
+            }
+
+            _pendingShotRemaining = -1f;
+            _setTelegraph?.Invoke(false);
+            _launchProjectile?.Invoke(_pendingTargetPosition);
+        }
+
+        private void CancelPendingProjectile()
+        {
+            _pendingShotRemaining = -1f;
+            _setTelegraph?.Invoke(false);
         }
     }
 }

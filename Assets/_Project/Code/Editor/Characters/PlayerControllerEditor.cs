@@ -25,6 +25,7 @@ namespace Odyssey.Editor.Characters
                 EditorGUILayout.Vector3Field("期望移动方向", player.DesiredMoveDirection);
                 EditorGUILayout.FloatField("地面坡度", player.GroundSlopeAngle);
                 EditorGUILayout.Toggle("墙边保护", player.WallClearanceActive);
+                EditorGUILayout.Toggle("伤害免疫", player.IsDamageImmune);
                 EditorGUILayout.IntField("当前生命", player.CurrentHealth);
                 EditorGUILayout.IntField("最大生命", player.MaxHealth);
             }

@@ -68,10 +68,11 @@ namespace Odyssey.Characters.Player
             }
 
             _wasPlacementRequested = shouldPlaceFeet;
-            footRig.weight = Mathf.MoveTowards(
-                footRig.weight,
-                shouldPlaceFeet ? 1f : 0f,
-                WeightSpeed * Time.deltaTime);
+            // 离开稳定待机时立即释放表现所有权，避免 Landing、走跑或攻击的第一帧仍被旧脚部 Target 拉扯。
+            // 重新进入待机时仍保留平滑淡入，因此不会产生突然吸附地面的视觉跳变。
+            footRig.weight = shouldPlaceFeet
+                ? Mathf.MoveTowards(footRig.weight, 1f, WeightSpeed * Time.deltaTime)
+                : 0f;
 
             if (!shouldPlaceFeet)
             {

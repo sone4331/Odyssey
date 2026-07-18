@@ -15,6 +15,7 @@ namespace Odyssey.Gameplay.Characters
         public const string AttackAbilityId = "player.attack";
         public const string DashAbilityId = "player.dash";
         public const string HitAbilityId = "player.hit";
+        public static readonly GameplayTag InvulnerableTag = GameplayTag.Parse("State.Invulnerable");
 
         public PlayerRuntimeSystems(PlayerConfigData config, int startingHealth)
         {
@@ -41,7 +42,11 @@ namespace Odyssey.Gameplay.Characters
                     DashAbilityId,
                     config.DashCooldown,
                     blockedTags: new[] { GameplayTag.Parse("State.Hit") },
-                    ownedTags: new[] { GameplayTag.Parse("Ability.Dash") }),
+                    ownedTags: new[]
+                    {
+                        GameplayTag.Parse("Ability.Dash"),
+                        InvulnerableTag
+                    }),
                 new AbilityDefinition(
                     HitAbilityId,
                     ownedTags: new[] { GameplayTag.Parse("State.Hit") },

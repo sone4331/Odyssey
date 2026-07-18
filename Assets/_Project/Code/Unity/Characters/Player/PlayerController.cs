@@ -17,7 +17,7 @@ namespace Odyssey.Characters.Player
     /// 保留原有序列化字段名和动画事件入口，是为了在完整重构时维持场景、Prefab 与动画剪辑的向后兼容。
     /// </summary>
     [RequireComponent(typeof(CharacterController))]
-    public sealed class PlayerController : MonoBehaviour, IConfigTarget<PlayerConfigData>
+    public sealed class PlayerController : MonoBehaviour, IConfigTarget<PlayerConfigData>, IDamageable
     {
         public const string AttackAbilityId = PlayerRuntimeSystems.AttackAbilityId;
         public const string DashAbilityId = PlayerRuntimeSystems.DashAbilityId;
@@ -99,9 +99,12 @@ namespace Odyssey.Characters.Player
         public Vector3 DesiredMoveDirection => _locomotion?.DesiredMoveDirection ?? Vector3.zero;
         public float GroundSlopeAngle => _locomotion?.GroundSlopeAngle ?? 0f;
         public bool WallClearanceActive => _locomotion?.WallClearanceActive ?? false;
+        public bool IsDamageImmune => IsInvincible ||
+                                      (Abilities?.Tags.Has(PlayerRuntimeSystems.InvulnerableTag) ?? false);
 
         public event Action<HealthChanged> HealthChanged;
         public event Action RuntimeConfigured;
+        public event Action<DamageRequest> DamageEvaded;
 
         private void Awake()
         {
@@ -172,17 +175,17 @@ namespace Odyssey.Characters.Player
 
         private void OnControllerColliderHit(ControllerColliderHit hit)
         {
-            if (!IsInvincible && ((1 << hit.gameObject.layer) & EnemyLayer) != 0)
+            if (((1 << hit.gameObject.layer) & EnemyLayer) != 0)
             {
-                TakeDamage(1, hit.transform.position);
+                TryTakeDamage(1, hit.transform.position, "enemy_contact");
             }
         }
 
         private void OnTriggerStay(Collider other)
         {
-            if (other.CompareTag("Acid") && !IsInvincible)
+            if (other.CompareTag("Acid"))
             {
-                TakeDamage(1, transform.position);
+                TryTakeDamage(1, transform.position, "acid");
             }
         }
 
@@ -204,15 +207,31 @@ namespace Odyssey.Characters.Player
         /// </summary>
         public void TakeDamage(int damage, Vector3 attackerPosition)
         {
-            if (IsInvincible || _isDead || _runtime == null)
+            TryTakeDamage(damage, attackerPosition, "enemy");
+        }
+
+        /// <summary>
+        /// 统一校验死亡、受击无敌和 Ability 标签后提交伤害，并返回可供投射物与未来 Host 使用的权威结果。
+        /// 冲刺无敌属于玩法规则而非碰撞特例，因此接触伤害与投射物都会经过同一入口。
+        /// </summary>
+        public DamageResult TryTakeDamage(int damage, Vector3 attackerPosition, string sourceId)
+        {
+            var request = new DamageRequest(damage, sourceId);
+            if (_isDead || _runtime == null)
             {
-                return;
+                return new DamageResult(false, 0, _isDead);
             }
 
-            var result = _runtime.Health.Apply(new DamageRequest(damage, "enemy"));
+            if (IsDamageImmune)
+            {
+                DamageEvaded?.Invoke(request);
+                return new DamageResult(false, 0, false);
+            }
+
+            var result = _runtime.Health.Apply(request);
             if (!result.Accepted)
             {
-                return;
+                return result;
             }
 
             if (result.Killed)
@@ -220,7 +239,7 @@ namespace Odyssey.Characters.Player
                 _isDead = true;
                 Animation.PlayDeath();
                 StartCoroutine(RespawnRoutine());
-                return;
+                return result;
             }
 
             StartCoroutine(InvincibilityRoutine());
@@ -237,6 +256,17 @@ namespace Odyssey.Characters.Player
             {
                 _actions.RequestHit(knockbackDirection * 12f);
             }
+
+            return result;
+        }
+
+        /// <summary>
+        /// 实现领域伤害端口，供不需要击退方向的调用方与网络权威层使用；现有 Unity 命中入口仍可额外提供攻击者位置。
+        /// </summary>
+        public DamageResult Apply(DamageRequest request)
+        {
+            var attackerPosition = transform.position - transform.forward;
+            return TryTakeDamage(request.Amount, attackerPosition, request.SourceId);
         }
 
         /// <summary>

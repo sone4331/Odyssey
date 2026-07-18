@@ -96,7 +96,11 @@ namespace Odyssey.Editor.Config
                     attackRange = ParseFloat(row["attackRange"], path, "attackRange"),
                     maxHealth = ParseInt(row["maxHealth"], path, "maxHealth"),
                     attackDamage = ParseInt(row["attackDamage"], path, "attackDamage"),
-                    attackCooldown = ParseFloat(row["attackCooldown"], path, "attackCooldown")
+                    attackCooldown = ParseFloat(row["attackCooldown"], path, "attackCooldown"),
+                    attackMode = ParseAttackMode(row["attackMode"], path),
+                    minimumAttackRange = ParseFloat(row["minimumAttackRange"], path, "minimumAttackRange"),
+                    projectileSpeed = ParseFloat(row["projectileSpeed"], path, "projectileSpeed"),
+                    attackWindup = ParseFloat(row["attackWindup"], path, "attackWindup")
                 });
             }
 
@@ -169,6 +173,22 @@ namespace Odyssey.Editor.Config
             }
 
             return result;
+        }
+
+        /// <summary>
+        /// 将策划表中的中文攻击类型转换为稳定枚举，避免 CSV 暴露代码枚举名称或依赖大小写。
+        /// </summary>
+        private static EnemyAttackMode ParseAttackMode(string value, string path)
+        {
+            switch (value)
+            {
+                case "近战":
+                    return EnemyAttackMode.Melee;
+                case "投射物":
+                    return EnemyAttackMode.Projectile;
+                default:
+                    throw new FormatException($"{path}：列“attackMode”只允许“近战”或“投射物”，当前值为“{value}”。");
+            }
         }
 
         private static void EnsureFolders(string path)

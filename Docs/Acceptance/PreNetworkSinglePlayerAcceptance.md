@@ -23,7 +23,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\Tools\Tests\RunHumanReadab
 
 预期结果：
 
-- 显示“通过：52 个核心规格”。
+- 显示“通过：59 个核心规格”。
 - 中文审计和架构注释审计全部通过。
 - `git diff --check` 没有空白错误。
 
@@ -34,15 +34,15 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\Tools\Tests\RunHumanReadab
 1. 点击 `Odyssey → 测试 → 运行 EditMode 测试`。
 2. 等待 Console 输出测试摘要。
 
-预期结果：19 项通过、0 项失败。重点覆盖 Ability、Tag、伤害、配置导入、Animator 混合结构、坡面投影、脚部 Rig、动态血量图标、暂停状态和目录完整性。
+预期结果：22 项通过、0 项失败。重点覆盖 Ability、Tag、伤害、配置导入、Animator 混合结构、坡面投影、脚部 Rig、动态血量图标、远程敌人配置、遭遇进度、暂停状态和目录完整性。
 
 ### 运行模式（PlayMode）
 
 1. 确认当前没有处于 Play Mode。
-2. 打开 `Window → General → Test Runner`，切换到 `PlayMode` 页签。
-3. 点击 `Run All`。测试会自动进入 Play Mode、装载 `Level_01` 并在结束后退出。
+2. 点击 `Odyssey → 测试 → 运行 PlayMode 测试`。
+3. 等待 Unity 自动进入 Play Mode、装载 `Level_01`、执行测试并在结束后退出；详细失败信息会写入 `Temp/OdysseyPlayModeTestResult.txt`。
 
-预期结果：13 项通过、0 项失败。分别验证：
+预期结果：16 项通过、0 项失败。除原有运行态回归外，还会验证冲刺无敌标签、投射物生命周期和三敌人遭遇完成边界。原有测试分别验证：
 
 - Bootstrap 应用六点生命配置并生成六个生命图标。
 - 暂停门面同时更新面板和 `Time.timeScale`。
@@ -152,7 +152,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\Tools\Tests\RunHumanReadab
 ## 十、最终通过标准
 
 - Unity Console 无编译错误、Missing Script 和项目自有持续异常。
-- 52 项核心规格、19 项 EditMode、13 项 PlayMode 全部通过。
+- 59 项核心规格、22 项 EditMode、16 项 PlayMode 全部通过。
 - 六点生命配置、六格血条、墙滑/墙跳配置、暂停存档和 AI 四目标均可实际复现。
 - Animator 的走跑、跳跃、落地、连击、冲刺、受击、死亡与复活衔接连贯。
 - CharacterController 校准、墙边安全距离和 Generic 双脚 Rig 均可实际复现。

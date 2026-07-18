@@ -1,3 +1,4 @@
+using System;
 using Odyssey.Gameplay.AI;
 using Odyssey.Gameplay.Combat;
 using Odyssey.Gameplay.Config;
@@ -27,6 +28,16 @@ namespace Odyssey.Characters.Enemies
         public float ChaseRange = 10f;
         public float AttackRange = 2f;
 
+        [Header("远程攻击")]
+        [SerializeField] private GameObject projectilePrefab;
+        [SerializeField] private Transform projectileOrigin;
+        [SerializeField] private GameObject attackTelegraph;
+
+        private EnemyAttackMode _attackMode;
+        private float _minimumAttackRange;
+        private float _projectileSpeed;
+        private float _attackWindup;
+
         private Animator _animator;
         private NavMeshAgent _agent;
         private Health _health;
@@ -36,6 +47,7 @@ namespace Odyssey.Characters.Enemies
         private EnemyPerception _perception;
         private EnemyActionRuntime _actions;
         private bool _isDead;
+        private bool _encounterActive = true;
         private Vector3 _deathFlyDirection;
         private float _deathFlySpeed;
 
@@ -45,6 +57,14 @@ namespace Odyssey.Characters.Enemies
         public float DecisionScore => _blackboard?.CurrentScore ?? 0f;
         public float TargetDistance => _blackboard?.DistanceToTarget ?? float.MaxValue;
         public float HealthRatio => _blackboard?.HealthRatio ?? 1f;
+        public EnemyAttackMode AttackMode => _attackMode;
+        public float MinimumAttackRange => _minimumAttackRange;
+
+        /// <summary>
+        /// 怪物完成死亡提交后发布的实例事件，遭遇控制器只依赖该事实统计进度，不轮询或控制怪物行为。
+        /// </summary>
+        public event Action<Enemy> Defeated;
+        public event Action<Enemy, DamageResult> Damaged;
 
         private void Awake()
         {
@@ -54,6 +74,11 @@ namespace Odyssey.Characters.Enemies
 
         private void Update()
         {
+            if (!_encounterActive)
+            {
+                return;
+            }
+
             if (_isDead)
             {
                 UpdateDeathPresentation();
@@ -66,6 +91,7 @@ namespace Odyssey.Characters.Enemies
                 _health.Maximum,
                 ChaseRange,
                 AttackRange,
+                _minimumAttackRange,
                 _actions.CanAttack(Time.time, AttackCooldown));
 
             if (_actions.TickLock(Time.deltaTime))
@@ -94,6 +120,8 @@ namespace Odyssey.Characters.Enemies
                 throw new System.ArgumentNullException(nameof(config));
             }
 
+            EnsureRuntimeDependencies();
+
             if (ReferenceEquals(_appliedConfig, config))
             {
                 return;
@@ -104,8 +132,17 @@ namespace Odyssey.Characters.Enemies
             AttackRange = config.AttackRange;
             AttackDamage = config.AttackDamage;
             AttackCooldown = config.AttackCooldown;
+            _attackMode = config.AttackMode;
+            _minimumAttackRange = config.MinimumAttackRange;
+            _projectileSpeed = config.ProjectileSpeed;
+            _attackWindup = config.AttackWindup;
             maxHealth = config.MaxHealth;
             RebuildHealth(maxHealth, preservedHealth);
+            _actions.ConfigureAttack(
+                _attackMode,
+                _attackWindup,
+                LaunchProjectile,
+                SetAttackTelegraph);
             _appliedConfig = config;
         }
 
@@ -132,7 +169,59 @@ namespace Odyssey.Characters.Enemies
                 _actions.NotifyHit();
             }
 
+            Damaged?.Invoke(this, result);
+
             return result;
+        }
+
+        /// <summary>
+        /// 由场景遭遇控制器切换怪物是否参与战斗；关闭时停止导航但保留对象、生命和事件订阅。
+        /// 该入口只表达场景生命周期，不把遭遇状态塞入 Utility 黑板或全局 Manager。
+        /// </summary>
+        public void SetEncounterActive(bool active)
+        {
+            EnsureRuntimeDependencies();
+            _encounterActive = active;
+            if (_agent == null || _isDead)
+            {
+                return;
+            }
+
+            if (active && !_agent.enabled)
+            {
+                var queryFilter = new NavMeshQueryFilter
+                {
+                    agentTypeID = _agent.agentTypeID,
+                    areaMask = _agent.areaMask
+                };
+                if (!NavMesh.SamplePosition(transform.position, out var hit, 8f, queryFilter))
+                {
+                    _encounterActive = false;
+                    Debug.LogWarning("怪物附近没有可用 NavMesh，本次遭遇不会激活该怪物。", this);
+                    return;
+                }
+
+                transform.position = hit.position;
+                _agent.enabled = true;
+                return;
+            }
+
+            if (!active)
+            {
+                if (_agent.enabled && _agent.isOnNavMesh)
+                {
+                    _agent.isStopped = true;
+                    _agent.velocity = Vector3.zero;
+                }
+
+                // 已经成功挂到 NavMesh 的 Agent 保持启用，只暂停行为；反复禁用再启用会让复杂关卡边缘重新绑定失败。
+                return;
+            }
+
+            if (_agent.enabled && _agent.isOnNavMesh)
+            {
+                _agent.isStopped = false;
+            }
         }
 
         /// <summary>
@@ -148,7 +237,7 @@ namespace Odyssey.Characters.Enemies
         /// </summary>
         public void AttackBegin()
         {
-            if (_isDead)
+            if (_isDead || _attackMode != EnemyAttackMode.Melee)
             {
                 return;
             }
@@ -197,11 +286,17 @@ namespace Odyssey.Characters.Enemies
             _decisionModel ??= new EnemyDecisionModel();
             _perception ??= new EnemyPerception(transform);
             _actions ??= new EnemyActionRuntime(transform, _animator, _agent);
+            _actions.ConfigureAttack(
+                _attackMode,
+                _attackWindup,
+                LaunchProjectile,
+                SetAttackTelegraph);
         }
 
         private void Die()
         {
             _isDead = true;
+            SetAttackTelegraph(false);
             _actions.DisableNavigation();
             var collision = GetComponent<Collider>();
             if (collision != null)
@@ -220,7 +315,53 @@ namespace Odyssey.Characters.Enemies
                 _animator.enabled = false;
             }
 
+            Defeated?.Invoke(this);
+
             Destroy(gameObject, 2f);
+        }
+
+        /// <summary>
+        /// 在远程攻击前摇结束时创建单个代码驱动投射物；Enemy 只负责提供配置和场景引用，命中生命周期由投射物自身管理。
+        /// </summary>
+        private void LaunchProjectile(Vector3 targetPosition)
+        {
+            if (_isDead || _attackMode != EnemyAttackMode.Projectile || projectilePrefab == null)
+            {
+                if (projectilePrefab == null)
+                {
+                    Debug.LogError("远程敌人缺少投射物 Prefab，无法完成攻击。", this);
+                }
+
+                return;
+            }
+
+            var origin = projectileOrigin == null
+                ? transform.position + Vector3.up * 0.8f + transform.forward * 0.5f
+                : projectileOrigin.position;
+            var direction = targetPosition - origin;
+            if (direction.sqrMagnitude <= 0.0001f)
+            {
+                direction = transform.forward;
+            }
+
+            var instance = Instantiate(projectilePrefab, origin, Quaternion.LookRotation(direction.normalized));
+            var projectile = instance.GetComponent<EnemyProjectile>();
+            if (projectile == null)
+            {
+                Debug.LogError("投射物 Prefab 缺少 EnemyProjectile 组件。", instance);
+                Destroy(instance);
+                return;
+            }
+
+            projectile.Initialize(this, direction.normalized, _projectileSpeed, AttackDamage);
+        }
+
+        private void SetAttackTelegraph(bool visible)
+        {
+            if (attackTelegraph != null)
+            {
+                attackTelegraph.SetActive(visible);
+            }
         }
 
         private void UpdateDeathPresentation()

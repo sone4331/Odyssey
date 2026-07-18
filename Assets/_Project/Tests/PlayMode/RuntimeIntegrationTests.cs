@@ -4,6 +4,7 @@ using NUnit.Framework;
 using Odyssey.Characters.Enemies;
 using Odyssey.Characters.Player;
 using Odyssey.Gameplay.AI;
+using Odyssey.Encounters;
 using Odyssey.Systems;
 using Odyssey.Unity.UI;
 using UnityEngine;
@@ -206,6 +207,115 @@ namespace Odyssey.Tests.PlayMode
         }
 
         [UnityTest]
+        public IEnumerator PlayerDash_RejectsDamageUntilAbilityEnds()
+        {
+            var player = Object.FindFirstObjectByType<PlayerController>();
+            Assert.That(player, Is.Not.Null, "场景中未找到玩家");
+            var healthBefore = player.CurrentHealth;
+
+            InvokePlayerCommand(player, "HandleDashRequested");
+            yield return null;
+            Assert.That(player.ActionState,
+                Is.EqualTo(Odyssey.Gameplay.Characters.PlayerActionStateId.Dash),
+                "玩家未进入冲刺，无法验证无敌窗口");
+            Assert.That(player.IsDamageImmune, Is.True, "冲刺 Ability 没有授予无敌标签");
+
+            var rejected = player.TryTakeDamage(1, player.transform.position - player.transform.forward, "测试投射物");
+            Assert.That(rejected.Accepted, Is.False, "冲刺期间的伤害没有被统一入口拒绝");
+            Assert.That(player.CurrentHealth, Is.EqualTo(healthBefore));
+
+            yield return new WaitForSeconds(player.DashDuration + 0.05f);
+            Assert.That(player.IsDamageImmune, Is.False, "冲刺结束后无敌标签仍然残留");
+        }
+
+        [UnityTest]
+        public IEnumerator EnemyProjectile_IgnoresOwnerHitsPlayerOnceAndExpires()
+        {
+            var player = Object.FindFirstObjectByType<PlayerController>();
+            Assert.That(player, Is.Not.Null, "场景中未找到投射物目标");
+            var playerPosition = player.transform.position;
+
+            var ownerObject = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            ownerObject.name = "投射物测试发射者";
+            ownerObject.transform.position = playerPosition - Vector3.forward * 2f;
+            var owner = ownerObject.AddComponent<Enemy>();
+
+            var projectileObject = new GameObject("投射物命中测试");
+            projectileObject.transform.position = ownerObject.transform.position + Vector3.up * 0.9f;
+            var projectile = projectileObject.AddComponent<EnemyProjectile>();
+            var targetDirection = player.transform.position + Vector3.up * 0.9f - projectileObject.transform.position;
+            projectile.Initialize(owner, targetDirection, 20f, 1, 1f);
+            var healthBefore = player.CurrentHealth;
+
+            for (var frame = 0; frame < 30 && projectileObject != null; frame++)
+            {
+                yield return null;
+            }
+
+            Assert.That(player.CurrentHealth, Is.EqualTo(healthBefore - 1),
+                "投射物没有忽略发射者并对玩家结算一次伤害");
+
+            var expiringObject = new GameObject("投射物超时测试");
+            expiringObject.transform.position = playerPosition + Vector3.up * 20f;
+            var expiring = expiringObject.AddComponent<EnemyProjectile>();
+            expiring.Initialize(owner, Vector3.up, 1f, 1, 0.02f);
+            Object.Destroy(ownerObject);
+            yield return null;
+            yield return new WaitForSeconds(0.05f);
+            Assert.That(expiring == null || expiring.IsResolved, Is.True,
+                "发射者死亡后，投射物没有继续推进自己的超时销毁生命周期");
+
+            if (projectileObject != null) Object.Destroy(projectileObject);
+            if (expiringObject != null) Object.Destroy(expiringObject);
+            yield return null;
+        }
+
+        [UnityTest]
+        public IEnumerator SinglePlayerEncounter_StartsAndCompletesExactlyOnce()
+        {
+            var encounter = Object.FindFirstObjectByType<CombatEncounterController>();
+            Assert.That(encounter, Is.Not.Null, "场景中缺少一键搭建的战斗遭遇");
+            Assert.That(encounter.Participants.Count, Is.EqualTo(3), "玩法切片应由两名近战怪和一名远程怪组成");
+
+            var startCount = 0;
+            var completionCount = 0;
+            encounter.EncounterStarted += () => startCount++;
+            encounter.EncounterCompleted += () => completionCount++;
+            if (encounter.State == Odyssey.Gameplay.Encounters.CombatEncounterState.Waiting)
+            {
+                encounter.StartEncounter();
+                encounter.StartEncounter();
+                Assert.That(startCount, Is.EqualTo(1), "复合碰撞体导致遭遇战重复开始");
+            }
+            else
+            {
+                Assert.That(encounter.State,
+                    Is.EqualTo(Odyssey.Gameplay.Encounters.CombatEncounterState.Active),
+                    "测试开始前遭遇状态异常");
+            }
+
+            yield return null;
+            foreach (var enemy in encounter.Participants)
+            {
+                var agent = enemy.GetComponent<UnityEngine.AI.NavMeshAgent>();
+                if (agent != null)
+                {
+                    Assert.That(agent.enabled && agent.isOnNavMesh, Is.True,
+                        $"遭遇参与者“{enemy.name}”没有稳定绑定到 NavMesh");
+                }
+            }
+
+            foreach (var enemy in encounter.Participants)
+            {
+                enemy.TakeDamage(enemy.CurrentHealth);
+            }
+
+            yield return null;
+            Assert.That(completionCount, Is.EqualTo(1), "全部敌人击败后完成事件没有且仅发布一次");
+            Assert.That(encounter.RemainingEnemies, Is.Zero);
+        }
+
+        [UnityTest]
         public IEnumerator PlayerAttack_AnimationWindowDamagesEachEnemyOnlyOnce()
         {
             var player = Object.FindFirstObjectByType<PlayerController>();
@@ -317,7 +427,9 @@ namespace Odyssey.Tests.PlayMode
             enemy.enabled = false;
 
             player.Controller.enabled = false;
-            player.transform.position = enemyObject.transform.position + Vector3.up * 0.5f;
+            // 脚底离敌人顶部仅保留 5 厘米，确保测试不依赖 Test Runner 是否限帧；
+            // 高速覆盖由 -20m/s 速度参与动态扫描距离这一事实单独验证。
+            player.transform.position = enemyObject.transform.position + Vector3.up * 0.3f;
             player.Controller.enabled = true;
             player.VerticalVelocity = -20f;
             yield return null;
@@ -405,7 +517,8 @@ namespace Odyssey.Tests.PlayMode
             AssertAnimatorState(player.Animator, "Landing");
             Assert.That(placement.CurrentWeight, Is.LessThan(0.1f),
                 "Landing 姿势尚未结束时脚部 Rig 提前锁定了双脚 Target");
-            yield return new WaitForSeconds(0.4f);
+            // Landing 本体与回到 Locomotion 的交叉淡化合计约 0.4 秒；再留出约 0.15 秒验证脚部 Rig 平滑淡入。
+            yield return new WaitForSeconds(0.55f);
             AssertAnimatorState(player.Animator, "Locomotion");
             Assert.That(placement.CurrentWeight, Is.GreaterThan(0.9f),
                 "回到稳定 Locomotion 后脚部 Rig 未重新校准并启用");

@@ -13,6 +13,8 @@ internal static class EnemyDecisionSpecs
         Spec.Run("三点生命剩一点时能够进入撤退", OneOfThreeHealthSelectsRetreat);
         Spec.Run("没有有效目标时选择待机", MissingTargetSelectsIdle);
         Spec.Run("攻击冷却期间在近距离保持待机", CooldownAtCloseRangeSelectsIdle);
+        Spec.Run("远程敌人距离过近时选择撤退", RangedEnemyTooCloseSelectsRetreat);
+        Spec.Run("远程敌人在安全射程内选择攻击", RangedEnemyAtSafeRangeSelectsAttack);
     }
 
     private static void ReadyTargetInRangeSelectsAttack()
@@ -96,5 +98,33 @@ internal static class EnemyDecisionSpecs
     private static EnemyDecisionModel CreateModel()
     {
         return new EnemyDecisionModel();
+    }
+
+    private static void RangedEnemyTooCloseSelectsRetreat()
+    {
+        var decision = CreateModel().Decide(new EnemyDecisionContext(
+            hasTarget: true,
+            distanceToTarget: 2f,
+            chaseRange: 12f,
+            attackRange: 8f,
+            minimumAttackRange: 3.5f,
+            healthRatio: 1f,
+            attackReady: true));
+
+        Spec.Equal(EnemyGoal.Retreat, decision.Goal, "远程敌人在危险近距离没有主动拉开空间");
+    }
+
+    private static void RangedEnemyAtSafeRangeSelectsAttack()
+    {
+        var decision = CreateModel().Decide(new EnemyDecisionContext(
+            hasTarget: true,
+            distanceToTarget: 6f,
+            chaseRange: 12f,
+            attackRange: 8f,
+            minimumAttackRange: 3.5f,
+            healthRatio: 1f,
+            attackReady: true));
+
+        Spec.Equal(EnemyGoal.Attack, decision.Goal, "远程敌人在可读安全射程内没有选择攻击");
     }
 }

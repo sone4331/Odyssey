@@ -11,6 +11,7 @@ using Odyssey.Unity.Save;
 using Odyssey.Unity.UI;
 using Odyssey.Unity.Config;
 using Odyssey.Editor.Config;
+using Odyssey.Gameplay.Encounters;
 using Odyssey.Inputs;
 using UnityEngine;
 using UnityEngine.UI;
@@ -171,6 +172,79 @@ namespace Odyssey.Tests
             {
                 Object.DestroyImmediate(root);
             }
+        }
+
+        [Test]
+        public void EnemyConfigEntry_ConvertsRangedCombatConfiguration()
+        {
+            var entry = new EnemyConfigEntry
+            {
+                id = "spitter",
+                chaseRange = 12f,
+                attackRange = 8f,
+                maxHealth = 3,
+                attackDamage = 1,
+                attackCooldown = 2.4f,
+                attackMode = EnemyAttackMode.Projectile,
+                minimumAttackRange = 3.5f,
+                projectileSpeed = 12f,
+                attackWindup = 0.55f
+            };
+
+            var data = entry.ToData();
+
+            Assert.That(data.AttackMode, Is.EqualTo(EnemyAttackMode.Projectile));
+            Assert.That(data.MinimumAttackRange, Is.EqualTo(3.5f));
+            Assert.That(data.ProjectileSpeed, Is.EqualTo(12f));
+            Assert.That(GameConfigValidator.Validate(data).IsValid, Is.True);
+        }
+
+        [Test]
+        public void CombatEncounterProgress_CompletesOnlyAfterAllConfiguredEnemies()
+        {
+            var progress = new CombatEncounterProgress(3);
+
+            Assert.That(progress.Start(), Is.True);
+            Assert.That(progress.RegisterDefeat(), Is.True);
+            Assert.That(progress.RegisterDefeat(), Is.True);
+            Assert.That(progress.State, Is.EqualTo(CombatEncounterState.Active));
+            Assert.That(progress.RegisterDefeat(), Is.True);
+            Assert.That(progress.State, Is.EqualTo(CombatEncounterState.Completed));
+            Assert.That(progress.RegisterDefeat(), Is.False);
+        }
+
+        [Test]
+        public void SinglePlayerSlice_ContainsCleanSpitterAndProjectilePrefabs()
+        {
+            const string spitterPath = "Assets/_Project/Content/Prefabs/Combat/Spitter.prefab";
+            const string projectilePath = "Assets/_Project/Content/Prefabs/Combat/SpitterProjectile.prefab";
+            var spitter = AssetDatabase.LoadAssetAtPath<GameObject>(spitterPath);
+            var projectile = AssetDatabase.LoadAssetAtPath<GameObject>(projectilePath);
+
+            Assert.That(spitter, Is.Not.Null, "一键搭建工具尚未生成项目自有 Spitter Prefab");
+            Assert.That(spitter.GetComponent<Odyssey.Characters.Enemies.Enemy>(), Is.Not.Null);
+            var spitterAgent = spitter.GetComponent<UnityEngine.AI.NavMeshAgent>();
+            Assert.That(spitterAgent, Is.Not.Null);
+            var matchedSmallAgentType = false;
+            for (var index = 0; index < UnityEngine.AI.NavMesh.GetSettingsCount(); index++)
+            {
+                var settings = UnityEngine.AI.NavMesh.GetSettingsByIndex(index);
+                if (Mathf.Abs(settings.agentHeight - 1f) > 0.15f)
+                {
+                    continue;
+                }
+
+                matchedSmallAgentType = true;
+                Assert.That(spitterAgent.agentTypeID, Is.EqualTo(settings.agentTypeID),
+                    "Spitter 没有使用关卡已烘焙的小型怪物 NavMesh Agent 类型");
+                break;
+            }
+
+            Assert.That(matchedSmallAgentType, Is.True, "项目缺少高度约 1 米的小型怪物 NavMesh 设置");
+            Assert.That(spitter.GetComponent<Animator>().runtimeAnimatorController.name,
+                Is.EqualTo("SpitterAnimator"));
+            Assert.That(projectile, Is.Not.Null, "一键搭建工具尚未生成项目自有投射物 Prefab");
+            Assert.That(projectile.GetComponent<Odyssey.Characters.Enemies.EnemyProjectile>(), Is.Not.Null);
         }
 
         [Test]

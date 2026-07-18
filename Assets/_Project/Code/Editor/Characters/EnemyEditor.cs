@@ -23,6 +23,10 @@ namespace Odyssey.Editor.Characters
                 EditorGUILayout.FloatField("Utility 分数", enemy.DecisionScore);
                 EditorGUILayout.FloatField("目标距离", enemy.TargetDistance);
                 EditorGUILayout.Slider("生命比例", enemy.HealthRatio, 0f, 1f);
+                EditorGUILayout.TextField("攻击方式", enemy.AttackMode == Odyssey.Gameplay.Config.EnemyAttackMode.Projectile
+                    ? "投射物"
+                    : "近战");
+                EditorGUILayout.FloatField("最小安全距离", enemy.MinimumAttackRange);
             }
 
             if (EditorApplication.isPlaying)
@@ -38,6 +42,11 @@ namespace Odyssey.Editor.Characters
             Handles.DrawWireDisc(enemy.transform.position, Vector3.up, enemy.ChaseRange);
             Handles.color = new Color(1f, 0.2f, 0.2f, 0.9f);
             Handles.DrawWireDisc(enemy.transform.position, Vector3.up, enemy.AttackRange);
+            if (enemy.MinimumAttackRange > 0f)
+            {
+                Handles.color = new Color(0.3f, 0.9f, 1f, 0.9f);
+                Handles.DrawWireDisc(enemy.transform.position, Vector3.up, enemy.MinimumAttackRange);
+            }
         }
     }
 }

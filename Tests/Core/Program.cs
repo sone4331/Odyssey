@@ -14,6 +14,7 @@ internal static class Program
         ConfigDatabaseSpecs.Register();
         CsvTableParserSpecs.Register();
         PlayerRuntimeSystemsSpecs.Register();
+        CombatEncounterProgressSpecs.Register();
         return Spec.Complete();
     }
 }

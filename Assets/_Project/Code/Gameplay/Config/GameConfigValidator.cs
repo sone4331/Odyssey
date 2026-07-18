@@ -89,6 +89,16 @@ namespace Odyssey.Gameplay.Config
             if (config.MaxHealth <= 0) errors.Add("MaxHealth 必须大于零。");
             if (config.AttackDamage <= 0) errors.Add("AttackDamage 必须大于零。");
             if (config.AttackCooldown < 0f) errors.Add("AttackCooldown 不能小于零。");
+            if (config.MinimumAttackRange < 0f || config.MinimumAttackRange >= config.AttackRange)
+            {
+                errors.Add("MinimumAttackRange 不能小于零且必须小于 AttackRange。");
+            }
+
+            if (config.AttackWindup < 0f) errors.Add("AttackWindup 不能小于零。");
+            if (config.AttackMode == EnemyAttackMode.Projectile && config.ProjectileSpeed <= 0f)
+            {
+                errors.Add("投射物敌人的 ProjectileSpeed 必须大于零。");
+            }
 
             return new ConfigValidationResult(errors);
         }

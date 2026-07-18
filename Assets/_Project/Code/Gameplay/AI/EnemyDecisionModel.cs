@@ -23,11 +23,31 @@ namespace Odyssey.Gameplay.AI
             float attackRange,
             float healthRatio,
             bool attackReady)
+            : this(
+                hasTarget,
+                distanceToTarget,
+                chaseRange,
+                attackRange,
+                0f,
+                healthRatio,
+                attackReady)
+        {
+        }
+
+        public EnemyDecisionContext(
+            bool hasTarget,
+            float distanceToTarget,
+            float chaseRange,
+            float attackRange,
+            float minimumAttackRange,
+            float healthRatio,
+            bool attackReady)
         {
             HasTarget = hasTarget;
             DistanceToTarget = distanceToTarget;
             ChaseRange = chaseRange;
             AttackRange = attackRange;
+            MinimumAttackRange = minimumAttackRange;
             HealthRatio = healthRatio;
             AttackReady = attackReady;
         }
@@ -36,6 +56,7 @@ namespace Odyssey.Gameplay.AI
         public float DistanceToTarget { get; }
         public float ChaseRange { get; }
         public float AttackRange { get; }
+        public float MinimumAttackRange { get; }
         public float HealthRatio { get; }
         public bool AttackReady { get; }
     }
@@ -65,6 +86,7 @@ namespace Odyssey.Gameplay.AI
         public float DistanceToTarget { get; private set; } = float.MaxValue;
         public float ChaseRange { get; private set; }
         public float AttackRange { get; private set; }
+        public float MinimumAttackRange { get; private set; }
         public float HealthRatio { get; private set; } = 1f;
         public bool AttackReady { get; private set; }
         public EnemyGoal CurrentGoal { get; private set; } = EnemyGoal.Idle;
@@ -75,6 +97,7 @@ namespace Odyssey.Gameplay.AI
             DistanceToTarget,
             ChaseRange,
             AttackRange,
+            MinimumAttackRange,
             HealthRatio,
             AttackReady);
 
@@ -86,6 +109,7 @@ namespace Odyssey.Gameplay.AI
             float distanceToTarget,
             float chaseRange,
             float attackRange,
+            float minimumAttackRange,
             float healthRatio,
             bool attackReady)
         {
@@ -93,6 +117,7 @@ namespace Odyssey.Gameplay.AI
             DistanceToTarget = distanceToTarget;
             ChaseRange = chaseRange;
             AttackRange = attackRange;
+            MinimumAttackRange = minimumAttackRange;
             HealthRatio = healthRatio;
             AttackReady = attackReady;
         }
@@ -122,12 +147,14 @@ namespace Odyssey.Gameplay.AI
                     context => context.HasTarget &&
                                context.HealthRatio > RetreatHealthThreshold &&
                                context.AttackReady &&
+                               context.DistanceToTarget >= context.MinimumAttackRange &&
                                context.DistanceToTarget <= context.AttackRange,
                     _ => 1f),
                 new UtilityGoal<EnemyGoal, EnemyDecisionContext>(
                     EnemyGoal.Retreat,
                     context => context.HasTarget &&
-                               context.HealthRatio <= RetreatHealthThreshold &&
+                               (context.HealthRatio <= RetreatHealthThreshold ||
+                                context.DistanceToTarget < context.MinimumAttackRange) &&
                                context.DistanceToTarget <= context.ChaseRange,
                     context => 0.75f + (1f - context.HealthRatio) * 0.25f,
                     context => 0.8f + Proximity(context) * 0.2f),

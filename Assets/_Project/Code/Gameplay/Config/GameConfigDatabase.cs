@@ -4,6 +4,16 @@ using System.Collections.Generic;
 namespace Odyssey.Gameplay.Config
 {
     /// <summary>
+    /// 描述敌人的攻击执行方式，是配置层传递给 Unity 表现适配器的稳定枚举。
+    /// 只区分当前玩法切片真实存在的近战与投射物两类，避免为了两个敌人建立通用技能编辑器。
+    /// </summary>
+    public enum EnemyAttackMode
+    {
+        Melee,
+        Projectile
+    }
+
+    /// <summary>
     /// 标识具有稳定 ID 的配置记录，是类型化配置数据库的最小数据契约。
     /// </summary>
     public interface IConfigRecord
@@ -112,7 +122,11 @@ namespace Odyssey.Gameplay.Config
             float attackRange,
             int maxHealth = 3,
             int attackDamage = 1,
-            float attackCooldown = 2f)
+            float attackCooldown = 2f,
+            EnemyAttackMode attackMode = EnemyAttackMode.Melee,
+            float minimumAttackRange = 0f,
+            float projectileSpeed = 0f,
+            float attackWindup = 0f)
         {
             Id = id;
             ChaseRange = chaseRange;
@@ -120,6 +134,10 @@ namespace Odyssey.Gameplay.Config
             MaxHealth = maxHealth;
             AttackDamage = attackDamage;
             AttackCooldown = attackCooldown;
+            AttackMode = attackMode;
+            MinimumAttackRange = minimumAttackRange;
+            ProjectileSpeed = projectileSpeed;
+            AttackWindup = attackWindup;
         }
 
         public string Id { get; }
@@ -128,6 +146,10 @@ namespace Odyssey.Gameplay.Config
         public int MaxHealth { get; }
         public int AttackDamage { get; }
         public float AttackCooldown { get; }
+        public EnemyAttackMode AttackMode { get; }
+        public float MinimumAttackRange { get; }
+        public float ProjectileSpeed { get; }
+        public float AttackWindup { get; }
     }
 
     /// <summary>

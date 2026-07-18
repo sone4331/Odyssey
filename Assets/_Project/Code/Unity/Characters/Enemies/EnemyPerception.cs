@@ -28,6 +28,7 @@ namespace Odyssey.Characters.Enemies
             int maximumHealth,
             float chaseRange,
             float attackRange,
+            float minimumAttackRange,
             bool attackReady)
         {
             if (_target == null)
@@ -49,6 +50,7 @@ namespace Odyssey.Characters.Enemies
                 distance,
                 chaseRange,
                 attackRange,
+                minimumAttackRange,
                 healthRatio,
                 attackReady);
         }

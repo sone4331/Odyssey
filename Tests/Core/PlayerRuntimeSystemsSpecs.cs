@@ -8,6 +8,7 @@ internal static class PlayerRuntimeSystemsSpecs
     {
         Spec.Run("玩家运行时使用配置初始化生命和冷却", RuntimeUsesConfiguredHealthAndCooldown);
         Spec.Run("玩家受击技能取消攻击与冲刺", HitAbilityCancelsOffensiveAbilities);
+        Spec.Run("冲刺激活期间持有无敌标签", DashOwnsInvulnerableTagUntilEnd);
     }
 
     private static void RuntimeUsesConfiguredHealthAndCooldown()
@@ -39,5 +40,16 @@ internal static class PlayerRuntimeSystemsSpecs
 
         Spec.True(!runtime.Abilities.IsActive(PlayerRuntimeSystems.AttackAbilityId), "受击后攻击技能仍处于激活状态");
         Spec.True(runtime.Abilities.IsActive(PlayerRuntimeSystems.HitAbilityId), "受击技能未进入激活状态");
+    }
+
+    private static void DashOwnsInvulnerableTagUntilEnd()
+    {
+        var runtime = new PlayerRuntimeSystems(new PlayerConfigData("player", 6f, 10f), 5);
+
+        runtime.Abilities.TryActivate(PlayerRuntimeSystems.DashAbilityId, 0f);
+        Spec.True(runtime.Abilities.Tags.Has(PlayerRuntimeSystems.InvulnerableTag), "冲刺期间没有持有无敌标签");
+
+        runtime.Abilities.End(PlayerRuntimeSystems.DashAbilityId);
+        Spec.True(!runtime.Abilities.Tags.Has(PlayerRuntimeSystems.InvulnerableTag), "冲刺结束后无敌标签没有移除");
     }
 }
