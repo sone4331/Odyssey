@@ -12,6 +12,7 @@ internal static class EnemyDecisionSpecs
         Spec.Run("低生命近距离时选择撤退", LowHealthAtCloseRangeSelectsRetreat);
         Spec.Run("三点生命剩一点时能够进入撤退", OneOfThreeHealthSelectsRetreat);
         Spec.Run("没有有效目标时选择待机", MissingTargetSelectsIdle);
+        Spec.Run("没有目标且配置路线时选择巡逻", MissingTargetWithRouteSelectsPatrol);
         Spec.Run("攻击冷却期间在近距离保持待机", CooldownAtCloseRangeSelectsIdle);
         Spec.Run("远程敌人距离过近时选择撤退", RangedEnemyTooCloseSelectsRetreat);
         Spec.Run("远程敌人在安全射程内选择攻击", RangedEnemyAtSafeRangeSelectsAttack);
@@ -67,6 +68,20 @@ internal static class EnemyDecisionSpecs
             attackReady: true));
 
         Spec.Equal(EnemyGoal.Idle, decision.Goal, "没有目标时未选择待机");
+    }
+
+    private static void MissingTargetWithRouteSelectsPatrol()
+    {
+        var decision = CreateModel().Decide(new EnemyDecisionContext(
+            hasTarget: false,
+            distanceToTarget: float.MaxValue,
+            chaseRange: 10f,
+            attackRange: 2f,
+            healthRatio: 1f,
+            attackReady: true,
+            hasPatrolRoute: true));
+
+        Spec.Equal(EnemyGoal.Patrol, decision.Goal, "配置了路线的怪物在非战斗阶段没有选择巡逻");
     }
 
     private static void OneOfThreeHealthSelectsRetreat()

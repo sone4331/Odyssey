@@ -46,6 +46,7 @@ namespace Odyssey.Characters.Enemies
         private EnemyDecisionModel _decisionModel;
         private EnemyPerception _perception;
         private EnemyActionRuntime _actions;
+        private EnemyPatrolRoute _patrolRoute;
         private bool _isDead;
         private bool _encounterActive = true;
         private Vector3 _deathFlyDirection;
@@ -59,6 +60,9 @@ namespace Odyssey.Characters.Enemies
         public float HealthRatio => _blackboard?.HealthRatio ?? 1f;
         public EnemyAttackMode AttackMode => _attackMode;
         public float MinimumAttackRange => _minimumAttackRange;
+        public bool HasPatrolRoute => _patrolRoute != null && _patrolRoute.HasValidRoute;
+        public string CurrentPatrolPointName => _patrolRoute == null ? "无" : _patrolRoute.CurrentPointName;
+        public bool IsEncounterActive => _encounterActive;
 
         /// <summary>
         /// 怪物完成死亡提交后发布的实例事件，遭遇控制器只依赖该事实统计进度，不轮询或控制怪物行为。
@@ -74,14 +78,29 @@ namespace Odyssey.Characters.Enemies
 
         private void Update()
         {
-            if (!_encounterActive)
+            if (_isDead)
+            {
+                UpdateDeathPresentation();
+                return;
+            }
+
+            if (_actions.TickLock(Time.deltaTime))
             {
                 return;
             }
 
-            if (_isDead)
+            if (!_encounterActive)
             {
-                UpdateDeathPresentation();
+                var waitingDecision = new EnemyDecision(
+                    HasPatrolRoute ? EnemyGoal.Patrol : EnemyGoal.Idle,
+                    HasPatrolRoute ? 0.2f : 0.1f);
+                _blackboard.CommitDecision(waitingDecision);
+                _actions.Execute(
+                    waitingDecision,
+                    null,
+                    Time.time,
+                    AttackCooldown,
+                    Time.deltaTime);
                 return;
             }
 
@@ -92,12 +111,8 @@ namespace Odyssey.Characters.Enemies
                 ChaseRange,
                 AttackRange,
                 _minimumAttackRange,
-                _actions.CanAttack(Time.time, AttackCooldown));
-
-            if (_actions.TickLock(Time.deltaTime))
-            {
-                return;
-            }
+                _actions.CanAttack(Time.time, AttackCooldown),
+                HasPatrolRoute);
 
             var decision = _decisionModel.Decide(_blackboard.Context);
             _blackboard.CommitDecision(decision);
@@ -175,8 +190,8 @@ namespace Odyssey.Characters.Enemies
         }
 
         /// <summary>
-        /// 由场景遭遇控制器切换怪物是否参与战斗；关闭时停止导航但保留对象、生命和事件订阅。
-        /// 该入口只表达场景生命周期，不把遭遇状态塞入 Utility 黑板或全局 Manager。
+        /// 由场景遭遇控制器切换怪物是否参与战斗；等待阶段只执行场景巡逻，激活后才感知并攻击玩家。
+        /// 该入口只表达场景生命周期，不把遭遇状态塞入全局 Manager，也不关闭 NavMeshAgent。
         /// </summary>
         public void SetEncounterActive(bool active)
         {
@@ -187,7 +202,7 @@ namespace Odyssey.Characters.Enemies
                 return;
             }
 
-            if (active && !_agent.enabled)
+            if (!_agent.enabled)
             {
                 var queryFilter = new NavMeshQueryFilter
                 {
@@ -203,19 +218,13 @@ namespace Odyssey.Characters.Enemies
 
                 transform.position = hit.position;
                 _agent.enabled = true;
-                return;
-            }
-
-            if (!active)
-            {
-                if (_agent.enabled && _agent.isOnNavMesh)
+                if (!_agent.isOnNavMesh)
                 {
-                    _agent.isStopped = true;
-                    _agent.velocity = Vector3.zero;
+                    _agent.enabled = false;
+                    _encounterActive = false;
+                    Debug.LogError("怪物启用 NavMeshAgent 后仍未绑定到对应类型的网格。", this);
+                    return;
                 }
-
-                // 已经成功挂到 NavMesh 的 Agent 保持启用，只暂停行为；反复禁用再启用会让复杂关卡边缘重新绑定失败。
-                return;
             }
 
             if (_agent.enabled && _agent.isOnNavMesh)
@@ -285,7 +294,9 @@ namespace Odyssey.Characters.Enemies
             _blackboard ??= new EnemyBlackboard();
             _decisionModel ??= new EnemyDecisionModel();
             _perception ??= new EnemyPerception(transform);
+            _patrolRoute ??= GetComponent<EnemyPatrolRoute>();
             _actions ??= new EnemyActionRuntime(transform, _animator, _agent);
+            _actions.ConfigurePatrol(_patrolRoute);
             _actions.ConfigureAttack(
                 _attackMode,
                 _attackWindup,

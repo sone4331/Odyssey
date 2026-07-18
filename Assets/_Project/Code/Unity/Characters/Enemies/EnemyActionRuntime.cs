@@ -15,6 +15,8 @@ namespace Odyssey.Characters.Enemies
         private readonly Transform _owner;
         private readonly Animator _animator;
         private readonly NavMeshAgent _agent;
+        private readonly float _combatMoveSpeed;
+        private EnemyPatrolRoute _patrolRoute;
         private string _currentAnimation = string.Empty;
         private float _lastAttackTime = float.NegativeInfinity;
         private float _lockRemaining;
@@ -31,11 +33,20 @@ namespace Odyssey.Characters.Enemies
             _owner = owner;
             _animator = animator;
             _agent = agent;
+            _combatMoveSpeed = agent == null ? 0f : agent.speed;
         }
 
         public bool CanAttack(float currentTime, float cooldown)
         {
             return _lockRemaining <= 0f && currentTime >= _lastAttackTime + cooldown;
+        }
+
+        /// <summary>
+        /// 注入场景配置的巡逻路线；动作层不创建点位，也不持有遭遇控制器，从而保持场景配置与执行逻辑解耦。
+        /// </summary>
+        public void ConfigurePatrol(EnemyPatrolRoute patrolRoute)
+        {
+            _patrolRoute = patrolRoute;
         }
 
         /// <summary>
@@ -80,6 +91,9 @@ namespace Odyssey.Characters.Enemies
         {
             switch (decision.Goal)
             {
+                case EnemyGoal.Patrol:
+                    Patrol(deltaTime);
+                    break;
                 case EnemyGoal.Chase:
                     Chase(target);
                     break;
@@ -128,6 +142,7 @@ namespace Odyssey.Characters.Enemies
                 return;
             }
 
+            RestoreCombatSpeed();
             _agent.isStopped = false;
             _agent.SetDestination(target.position);
             PlayAnimation(_attackMode == EnemyAttackMode.Projectile ? "Fleeing" : "Run", 0.12f);
@@ -169,6 +184,7 @@ namespace Odyssey.Characters.Enemies
                 return;
             }
 
+            RestoreCombatSpeed();
             _retreatRefreshRemaining -= deltaTime;
             if (_retreatRefreshRemaining <= 0f)
             {
@@ -195,6 +211,31 @@ namespace Odyssey.Characters.Enemies
             PlayAnimation(_attackMode == EnemyAttackMode.Projectile ? "Fleeing" : "Run", 0.12f);
         }
 
+        /// <summary>
+        /// 以战斗速度的 55% 沿路线移动，到点后短暂停留；巡逻只负责表现和导航，不改变感知或遭遇状态。
+        /// </summary>
+        private void Patrol(float deltaTime)
+        {
+            if (!CanNavigate() || _patrolRoute == null ||
+                !_patrolRoute.Evaluate(_owner.position, deltaTime, out var destination, out var waiting))
+            {
+                Idle();
+                return;
+            }
+
+            if (waiting)
+            {
+                StopNavigation();
+                PlayAnimation("Idle", 0.12f);
+                return;
+            }
+
+            _agent.speed = Mathf.Max(0.1f, _combatMoveSpeed * 0.55f);
+            _agent.isStopped = false;
+            _agent.SetDestination(destination);
+            PlayAnimation(_attackMode == EnemyAttackMode.Projectile ? "Fleeing" : "Run", 0.12f);
+        }
+
         private bool CanNavigate()
         {
             return _agent != null && _agent.enabled && _agent.isOnNavMesh;
@@ -213,13 +254,53 @@ namespace Odyssey.Characters.Enemies
 
         private void PlayAnimation(string stateName, float transitionDuration)
         {
-            if (_animator == null || _currentAnimation == stateName)
+            if (_animator == null)
             {
                 return;
             }
 
-            _animator.CrossFadeInFixedTime(stateName, transitionDuration, 0);
-            _currentAnimation = stateName;
+            var resolvedState = ResolveAnimationState(stateName);
+            if (string.IsNullOrEmpty(resolvedState) || _currentAnimation == resolvedState)
+            {
+                return;
+            }
+
+            _animator.CrossFadeInFixedTime(
+                Animator.StringToHash("Base Layer." + resolvedState),
+                transitionDuration,
+                0);
+            _currentAnimation = resolvedState;
+        }
+
+        /// <summary>
+        /// 在播放前验证状态存在；远程怪配置尚未装配时若收到受击，优先回退到 TopHit，避免 Unity 输出 GotoState 警告。
+        /// </summary>
+        private string ResolveAnimationState(string requestedState)
+        {
+            if (HasAnimationState(requestedState))
+            {
+                return requestedState;
+            }
+
+            if (requestedState.StartsWith("Hit", StringComparison.Ordinal) && HasAnimationState("TopHit"))
+            {
+                return "TopHit";
+            }
+
+            return HasAnimationState("Idle") ? "Idle" : string.Empty;
+        }
+
+        private bool HasAnimationState(string stateName)
+        {
+            return _animator.HasState(0, Animator.StringToHash("Base Layer." + stateName));
+        }
+
+        private void RestoreCombatSpeed()
+        {
+            if (_agent != null && _combatMoveSpeed > 0f)
+            {
+                _agent.speed = _combatMoveSpeed;
+            }
         }
 
         private void TickPendingProjectile(float deltaTime)

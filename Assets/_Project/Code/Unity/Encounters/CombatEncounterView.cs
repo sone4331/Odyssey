@@ -23,7 +23,7 @@ namespace Odyssey.Encounters
             encounter.EncounterStarted += ShowStarted;
             encounter.EnemyDefeated += ShowProgress;
             encounter.EncounterCompleted += ShowCompleted;
-            SetText("进入战斗区域开始挑战");
+            SetText($"{encounter.DisplayName}：进入区域，击败敌人后蓝色出口开启");
         }
 
         private void OnDisable()
@@ -40,17 +40,17 @@ namespace Odyssey.Encounters
 
         private void ShowStarted()
         {
-            SetText($"战斗开始　剩余敌人：{encounter.RemainingEnemies}");
+            SetText($"{encounter.DisplayName}开始　剩余敌人：{encounter.RemainingEnemies}");
         }
 
         private void ShowProgress(Odyssey.Characters.Enemies.Enemy _)
         {
-            SetText($"剩余敌人：{encounter.RemainingEnemies}");
+            SetText($"{encounter.DisplayName}　剩余敌人：{encounter.RemainingEnemies}");
         }
 
         private void ShowCompleted()
         {
-            SetText("战斗完成　出口已开启");
+            SetText($"{encounter.DisplayName}完成　蓝色出口已开启");
         }
 
         private void SetText(string value)

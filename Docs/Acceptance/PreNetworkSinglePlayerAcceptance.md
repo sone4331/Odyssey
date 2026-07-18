@@ -23,7 +23,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\Tools\Tests\RunHumanReadab
 
 预期结果：
 
-- 显示“通过：59 个核心规格”。
+- 显示“通过：60 个核心规格”。
 - 中文审计和架构注释审计全部通过。
 - `git diff --check` 没有空白错误。
 
@@ -42,7 +42,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\Tools\Tests\RunHumanReadab
 2. 点击 `Odyssey → 测试 → 运行 PlayMode 测试`。
 3. 等待 Unity 自动进入 Play Mode、装载 `Level_01`、执行测试并在结束后退出；详细失败信息会写入 `Temp/OdysseyPlayModeTestResult.txt`。
 
-预期结果：16 项通过、0 项失败。除原有运行态回归外，还会验证冲刺无敌标签、投射物生命周期和三敌人遭遇完成边界。原有测试分别验证：
+预期结果：16 项通过、0 项失败。除原有运行态回归外，还会验证冲刺无敌标签、投射物生命周期、两组遭遇的独立完成边界和等待阶段巡逻。原有测试分别验证：
 
 - Bootstrap 应用六点生命配置并生成六个生命图标。
 - 暂停门面同时更新面板和 `Time.timeScale`。
@@ -129,9 +129,10 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\Tools\Tests\RunHumanReadab
 1. 在非 Play Mode 选中任意 `Chomper`。
 2. Scene 视图应显示黄色追击范围和红色攻击范围。
 3. 进入 Play Mode 后观察 Inspector 的只读区域：当前目标、Utility 分数、目标距离和生命比例会持续刷新。
-4. 远离怪物时目标为 `Idle`；进入黄色范围后变为 `Chase`；进入红色范围且冷却完成后变为 `Attack`。
+4. 未激活战区或玩家离开黄色范围时，有路线的怪物目标为 `Patrol`；进入黄色范围后变为 `Chase`；进入红色范围且冷却完成后变为 `Attack`。
 5. 怪物剩余 1/3 生命且玩家仍在追击范围内时变为 `Retreat`。
 6. 受击与死亡属于事件打断，应优先于上述常规 Utility 目标。
+7. 尚未进入的战区中，怪物目标应为 `Patrol`，沿三个巡逻点循环移动；进入对应触发区后切换为追击、攻击或撤退。
 
 ## 九、轻量性能验收
 
@@ -152,7 +153,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\Tools\Tests\RunHumanReadab
 ## 十、最终通过标准
 
 - Unity Console 无编译错误、Missing Script 和项目自有持续异常。
-- 59 项核心规格、22 项 EditMode、16 项 PlayMode 全部通过。
+- 60 项核心规格、22 项 EditMode、16 项 PlayMode 全部通过。
 - 六点生命配置、六格血条、墙滑/墙跳配置、暂停存档和 AI 四目标均可实际复现。
 - Animator 的走跑、跳跃、落地、连击、冲刺、受击、死亡与复活衔接连贯。
 - CharacterController 校准、墙边安全距离和 Generic 双脚 Rig 均可实际复现。

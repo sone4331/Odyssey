@@ -27,6 +27,9 @@ namespace Odyssey.Editor.Characters
                     ? "投射物"
                     : "近战");
                 EditorGUILayout.FloatField("最小安全距离", enemy.MinimumAttackRange);
+                EditorGUILayout.Toggle("遭遇已激活", enemy.IsEncounterActive);
+                EditorGUILayout.Toggle("巡逻路线有效", enemy.HasPatrolRoute);
+                EditorGUILayout.TextField("当前巡逻点", enemy.CurrentPatrolPointName);
             }
 
             if (EditorApplication.isPlaying)

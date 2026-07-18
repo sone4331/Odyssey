@@ -1,9 +1,11 @@
 using System.Collections;
+using System.Linq;
 using System.Reflection;
 using NUnit.Framework;
 using Odyssey.Characters.Enemies;
 using Odyssey.Characters.Player;
 using Odyssey.Gameplay.AI;
+using Odyssey.Gameplay.Config;
 using Odyssey.Encounters;
 using Odyssey.Systems;
 using Odyssey.Unity.UI;
@@ -271,48 +273,104 @@ namespace Odyssey.Tests.PlayMode
         }
 
         [UnityTest]
-        public IEnumerator SinglePlayerEncounter_StartsAndCompletesExactlyOnce()
+        public IEnumerator SinglePlayerEncounter_TwoGroupsPatrolStartAndCompleteIndependently()
         {
-            var encounter = Object.FindFirstObjectByType<CombatEncounterController>();
-            Assert.That(encounter, Is.Not.Null, "场景中缺少一键搭建的战斗遭遇");
-            Assert.That(encounter.Participants.Count, Is.EqualTo(3), "玩法切片应由两名近战怪和一名远程怪组成");
-
-            var startCount = 0;
-            var completionCount = 0;
-            encounter.EncounterStarted += () => startCount++;
-            encounter.EncounterCompleted += () => completionCount++;
-            if (encounter.State == Odyssey.Gameplay.Encounters.CombatEncounterState.Waiting)
-            {
-                encounter.StartEncounter();
-                encounter.StartEncounter();
-                Assert.That(startCount, Is.EqualTo(1), "复合碰撞体导致遭遇战重复开始");
-            }
-            else
-            {
-                Assert.That(encounter.State,
-                    Is.EqualTo(Odyssey.Gameplay.Encounters.CombatEncounterState.Active),
-                    "测试开始前遭遇状态异常");
-            }
-
+            var encounters = Object.FindObjectsByType<CombatEncounterController>(
+                    FindObjectsInactive.Exclude,
+                    FindObjectsSortMode.None)
+                .OrderBy(encounter => encounter.DisplayName)
+                .ToArray();
+            Assert.That(encounters.Length, Is.EqualTo(2), "场景应包含位于不同位置的两组独立遭遇");
+            var firstTrigger = encounters[0].GetComponentInChildren<CombatEncounterTrigger>();
+            var secondTrigger = encounters[1].GetComponentInChildren<CombatEncounterTrigger>();
+            Assert.That(firstTrigger, Is.Not.Null);
+            Assert.That(secondTrigger, Is.Not.Null);
+            Assert.That(Vector3.Distance(firstTrigger.transform.position, secondTrigger.transform.position),
+                Is.GreaterThan(10f),
+                "两组遭遇仍堆在地图同一区域，没有形成分段玩法");
             yield return null;
-            foreach (var enemy in encounter.Participants)
+            Assert.That(encounters.Any(encounter =>
+                    encounter.State == Odyssey.Gameplay.Encounters.CombatEncounterState.Active),
+                Is.True,
+                "玩家出生在第一战区时，带刚体的 Trigger 没有自动激活遭遇");
+            var waitingEncounter = encounters.FirstOrDefault(encounter =>
+                encounter.State == Odyssey.Gameplay.Encounters.CombatEncounterState.Waiting);
+            Assert.That(waitingEncounter, Is.Not.Null, "第二战区不应在玩家尚未到达时提前激活");
+            var patrolStartPositions = waitingEncounter.Participants
+                .Select(enemy => enemy.transform.position)
+                .ToArray();
+            yield return new WaitForSeconds(1.2f);
+            Assert.That(waitingEncounter.Participants.Select((enemy, index) =>
+                    Vector3.Distance(enemy.transform.position, patrolStartPositions[index]) > 0.05f ||
+                    enemy.GetComponent<UnityEngine.AI.NavMeshAgent>().hasPath).Any(moving => moving),
+                Is.True,
+                "等待中的第二战区怪物没有沿巡逻点产生导航移动");
+
+            foreach (var encounter in encounters)
             {
-                var agent = enemy.GetComponent<UnityEngine.AI.NavMeshAgent>();
-                if (agent != null)
+                Assert.That(encounter.Participants.Count, Is.EqualTo(3),
+                    $"{encounter.DisplayName}应由两名近战怪和一名远程怪组成");
+                var trigger = encounter.GetComponentInChildren<CombatEncounterTrigger>();
+                Assert.That(trigger, Is.Not.Null, $"{encounter.DisplayName}缺少专用物理触发适配器");
+                Assert.That(trigger.GetComponent<Rigidbody>().isKinematic, Is.True,
+                    $"{encounter.DisplayName}触发区没有使用运动学刚体保证 Trigger 消息");
+                var door = encounter.GetComponentInChildren<CombatEncounterDoor>();
+                Assert.That(door, Is.Not.Null, $"{encounter.DisplayName}缺少蓝色战斗出口");
+                var closedDoorPosition = door.transform.position;
+                Assert.That(door.GetComponent<Collider>().enabled, Is.True,
+                    $"{encounter.DisplayName}尚未完成时蓝色出口没有阻挡玩家");
+
+                if (encounter.State == Odyssey.Gameplay.Encounters.CombatEncounterState.Waiting)
                 {
+                    foreach (var enemy in encounter.Participants)
+                    {
+                        Assert.That(enemy.CurrentGoal, Is.EqualTo(EnemyGoal.Patrol),
+                            $"等待中的{encounter.DisplayName}怪物没有沿巡逻点移动");
+                    }
+                }
+
+                var startCount = 0;
+                var completionCount = 0;
+                encounter.EncounterStarted += () => startCount++;
+                encounter.EncounterCompleted += () => completionCount++;
+                var startedByTest = encounter.State == Odyssey.Gameplay.Encounters.CombatEncounterState.Waiting;
+                if (startedByTest)
+                {
+                    encounter.StartEncounter();
+                    encounter.StartEncounter();
+                    Assert.That(startCount, Is.EqualTo(1), "复合碰撞体导致遭遇战重复开始");
+                }
+
+                yield return null;
+                foreach (var enemy in encounter.Participants)
+                {
+                    var route = enemy.GetComponent<EnemyPatrolRoute>();
+                    Assert.That(route, Is.Not.Null, $"遭遇参与者“{enemy.name}”缺少巡逻路线组件");
+                    Assert.That(route.HasValidRoute, Is.True,
+                        $"遭遇参与者“{enemy.name}”没有有效巡逻点");
+                    Assert.That(route.PatrolPoints.Count, Is.EqualTo(3));
+                    var agent = enemy.GetComponent<UnityEngine.AI.NavMeshAgent>();
                     Assert.That(agent.enabled && agent.isOnNavMesh, Is.True,
                         $"遭遇参与者“{enemy.name}”没有稳定绑定到 NavMesh");
+                    if (enemy.ConfigId == "spitter")
+                    {
+                        Assert.That(enemy.AttackMode, Is.EqualTo(EnemyAttackMode.Projectile),
+                            "Spitter 没有在战斗前完成远程配置装配");
+                    }
+
+                    enemy.TakeDamage(enemy.CurrentHealth);
                 }
-            }
 
-            foreach (var enemy in encounter.Participants)
-            {
-                enemy.TakeDamage(enemy.CurrentHealth);
+                yield return null;
+                Assert.That(completionCount, Is.EqualTo(1),
+                    $"{encounter.DisplayName}全部敌人击败后没有且仅完成一次");
+                Assert.That(encounter.RemainingEnemies, Is.Zero);
+                yield return new WaitForSeconds(1.3f);
+                Assert.That(door.transform.position.y, Is.GreaterThan(closedDoorPosition.y + 3.9f),
+                    $"{encounter.DisplayName}完成后蓝色出口没有抬起");
+                Assert.That(door.GetComponent<Collider>().enabled, Is.False,
+                    $"{encounter.DisplayName}完成后蓝色出口仍阻挡玩家");
             }
-
-            yield return null;
-            Assert.That(completionCount, Is.EqualTo(1), "全部敌人击败后完成事件没有且仅发布一次");
-            Assert.That(encounter.RemainingEnemies, Is.Zero);
         }
 
         [UnityTest]

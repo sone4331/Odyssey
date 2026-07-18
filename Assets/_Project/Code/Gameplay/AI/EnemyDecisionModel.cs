@@ -6,6 +6,7 @@ namespace Odyssey.Gameplay.AI
     public enum EnemyGoal
     {
         Idle,
+        Patrol,
         Chase,
         Attack,
         Retreat
@@ -22,7 +23,8 @@ namespace Odyssey.Gameplay.AI
             float chaseRange,
             float attackRange,
             float healthRatio,
-            bool attackReady)
+            bool attackReady,
+            bool hasPatrolRoute = false)
             : this(
                 hasTarget,
                 distanceToTarget,
@@ -30,7 +32,8 @@ namespace Odyssey.Gameplay.AI
                 attackRange,
                 0f,
                 healthRatio,
-                attackReady)
+                attackReady,
+                hasPatrolRoute)
         {
         }
 
@@ -41,7 +44,8 @@ namespace Odyssey.Gameplay.AI
             float attackRange,
             float minimumAttackRange,
             float healthRatio,
-            bool attackReady)
+            bool attackReady,
+            bool hasPatrolRoute = false)
         {
             HasTarget = hasTarget;
             DistanceToTarget = distanceToTarget;
@@ -50,6 +54,7 @@ namespace Odyssey.Gameplay.AI
             MinimumAttackRange = minimumAttackRange;
             HealthRatio = healthRatio;
             AttackReady = attackReady;
+            HasPatrolRoute = hasPatrolRoute;
         }
 
         public bool HasTarget { get; }
@@ -59,6 +64,7 @@ namespace Odyssey.Gameplay.AI
         public float MinimumAttackRange { get; }
         public float HealthRatio { get; }
         public bool AttackReady { get; }
+        public bool HasPatrolRoute { get; }
     }
 
     /// <summary>
@@ -89,6 +95,7 @@ namespace Odyssey.Gameplay.AI
         public float MinimumAttackRange { get; private set; }
         public float HealthRatio { get; private set; } = 1f;
         public bool AttackReady { get; private set; }
+        public bool HasPatrolRoute { get; private set; }
         public EnemyGoal CurrentGoal { get; private set; } = EnemyGoal.Idle;
         public float CurrentScore { get; private set; }
 
@@ -99,7 +106,8 @@ namespace Odyssey.Gameplay.AI
             AttackRange,
             MinimumAttackRange,
             HealthRatio,
-            AttackReady);
+            AttackReady,
+            HasPatrolRoute);
 
         /// <summary>
         /// 一次性覆盖本帧全部感知事实，避免消费者读取到新旧帧混合的黑板状态。
@@ -111,7 +119,8 @@ namespace Odyssey.Gameplay.AI
             float attackRange,
             float minimumAttackRange,
             float healthRatio,
-            bool attackReady)
+            bool attackReady,
+            bool hasPatrolRoute)
         {
             HasTarget = hasTarget;
             DistanceToTarget = distanceToTarget;
@@ -120,6 +129,7 @@ namespace Odyssey.Gameplay.AI
             MinimumAttackRange = minimumAttackRange;
             HealthRatio = healthRatio;
             AttackReady = attackReady;
+            HasPatrolRoute = hasPatrolRoute;
         }
 
         public void CommitDecision(EnemyDecision decision)
@@ -130,8 +140,8 @@ namespace Odyssey.Gameplay.AI
     }
 
     /// <summary>
-    /// 根据目标距离、攻击冷却和生命比例选择 Idle、Chase、Attack 或 Retreat。
-    /// 采用 Utility AI 与 Strategy 组合，不构建通用行为树框架；当前四个目标足以覆盖演示场景并保持规则可测试。
+    /// 根据巡逻路线、目标距离、攻击冷却和生命比例选择 Patrol、Chase、Attack 或 Retreat。
+    /// 采用 Utility AI 与 Strategy 组合，不构建通用行为树框架；目标数量只覆盖当前两组遭遇需要的行为闭环。
     /// </summary>
     public sealed class EnemyDecisionModel
     {
@@ -164,6 +174,10 @@ namespace Odyssey.Gameplay.AI
                                context.DistanceToTarget > context.AttackRange &&
                                context.DistanceToTarget <= context.ChaseRange,
                     context => 0.4f + Proximity(context) * 0.5f),
+                new UtilityGoal<EnemyGoal, EnemyDecisionContext>(
+                    EnemyGoal.Patrol,
+                    context => !context.HasTarget && context.HasPatrolRoute,
+                    _ => 0.2f),
                 new UtilityGoal<EnemyGoal, EnemyDecisionContext>(
                     EnemyGoal.Idle,
                     _ => true,

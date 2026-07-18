@@ -43,9 +43,17 @@ MonoBehaviour:
     maxHealth: 3
     attackDamage: 1
     attackCooldown: 2
+    attackMode: 0
+    minimumAttackRange: 0
+    projectileSpeed: 0
+    attackWindup: 0.2
   - id: spitter
     chaseRange: 12
     attackRange: 8
     maxHealth: 3
     attackDamage: 1
     attackCooldown: 2.4
+    attackMode: 1
+    minimumAttackRange: 3.5
+    projectileSpeed: 12
+    attackWindup: 0.55

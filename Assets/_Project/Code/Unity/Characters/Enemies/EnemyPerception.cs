@@ -29,7 +29,8 @@ namespace Odyssey.Characters.Enemies
             float chaseRange,
             float attackRange,
             float minimumAttackRange,
-            bool attackReady)
+            bool attackReady,
+            bool hasPatrolRoute)
         {
             if (_target == null)
             {
@@ -37,10 +38,12 @@ namespace Odyssey.Characters.Enemies
                 _target = player == null ? null : player.transform;
             }
 
-            var hasTarget = _target != null && _target.gameObject.activeInHierarchy;
-            var distance = hasTarget
+            var playerAvailable = _target != null && _target.gameObject.activeInHierarchy;
+            var distance = playerAvailable
                 ? Vector3.Distance(_owner.position, _target.position)
                 : float.MaxValue;
+            // 场景里存在玩家并不代表怪物已经感知到玩家；只有进入追击范围才把目标交给 Utility 层。
+            var hasTarget = playerAvailable && distance <= chaseRange;
             var healthRatio = maximumHealth <= 0
                 ? 0f
                 : Mathf.Clamp01((float)currentHealth / maximumHealth);
@@ -52,7 +55,8 @@ namespace Odyssey.Characters.Enemies
                 attackRange,
                 minimumAttackRange,
                 healthRatio,
-                attackReady);
+                attackReady,
+                hasPatrolRoute);
         }
     }
 }

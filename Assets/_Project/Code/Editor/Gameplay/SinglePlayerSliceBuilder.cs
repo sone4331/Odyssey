@@ -5,6 +5,7 @@ using Cinemachine;
 using Odyssey.Characters.Enemies;
 using Odyssey.Characters.Player;
 using Odyssey.Encounters;
+using Odyssey.Editor.Config;
 using UnityEditor;
 using UnityEditor.Animations;
 using UnityEditor.SceneManagement;
@@ -16,7 +17,7 @@ using Object = UnityEngine.Object;
 namespace Odyssey.Editor.Gameplay
 {
     /// <summary>
-    /// 自动生成干净的 Spitter、投射物和三敌人遭遇场景，是玩法切片资产装配的唯一 Editor 入口。
+    /// 自动生成干净的 Spitter、投射物、两组遭遇和巡逻路线，是玩法切片资产装配的唯一 Editor 入口。
     /// 采用 Builder 与幂等资产管线：复用官方美术但移除教学脚本，重复执行会更新同一资产而不会堆叠对象。
     /// </summary>
     public static class SinglePlayerSliceBuilder
@@ -43,6 +44,8 @@ namespace Odyssey.Editor.Gameplay
         [MenuItem("Odyssey/场景/搭建单机玩法切片")]
         public static void BuildSinglePlayerSlice()
         {
+            // 场景资产依赖攻击方式和射程配置；先强制完成同一套导表校验，避免 CSV 已更新但运行时资产仍是旧版本。
+            GameConfigImporter.ImportAll();
             EnsureFolder(GeneratedFolder);
             var controller = BuildCleanSpitterController();
             var projectilePrefab = BuildProjectilePrefab();
@@ -50,7 +53,7 @@ namespace Odyssey.Editor.Gameplay
             ConfigureScene(spitterPrefab);
             AssetDatabase.SaveAssets();
             AssetDatabase.Refresh();
-            Debug.Log("单机玩法切片搭建完成：2 个近战怪、1 个远程怪、遭遇 HUD、出口和命中反馈已配置。");
+            Debug.Log("单机玩法切片搭建完成：两组独立战区、六只怪物、巡逻路线、HUD、蓝色出口和命中反馈已配置。");
         }
 
         private static AnimatorController BuildCleanSpitterController()
@@ -68,15 +71,15 @@ namespace Odyssey.Editor.Gameplay
             }
 
             var stateMachine = controller.layers[0].stateMachine;
-            foreach (var generatedClip in AssetDatabase.LoadAllAssetsAtPath(SpitterControllerPath)
-                         .OfType<AnimationClip>()
-                         .Where(clip => clip.name.StartsWith("Spitter_", StringComparison.Ordinal))
+            var requiredStates = new[] { "Idle", "Fleeing", "Attack", "TopHit" };
+            var requiredStateSet = new HashSet<string>(requiredStates, StringComparer.Ordinal);
+            var generatedClips = AssetDatabase.LoadAllAssetsAtPath(SpitterControllerPath)
+                .OfType<AnimationClip>()
+                .Where(clip => clip.name.StartsWith("Spitter_", StringComparison.Ordinal))
+                .ToDictionary(clip => clip.name, StringComparer.Ordinal);
+            foreach (var child in stateMachine.states
+                         .Where(child => !requiredStateSet.Contains(child.state.name))
                          .ToArray())
-            {
-                Object.DestroyImmediate(generatedClip, true);
-            }
-
-            foreach (var child in stateMachine.states.ToArray())
             {
                 stateMachine.RemoveState(child.state);
             }
@@ -86,7 +89,15 @@ namespace Odyssey.Editor.Gameplay
                 stateMachine.RemoveStateMachine(child.stateMachine);
             }
 
-            var requiredStates = new[] { "Idle", "Fleeing", "Attack", "TopHit" };
+            foreach (var obsoleteClip in generatedClips
+                         .Where(pair => !requiredStateSet.Contains(pair.Key.Substring("Spitter_".Length)))
+                         .Select(pair => pair.Value)
+                         .ToArray())
+            {
+                generatedClips.Remove(obsoleteClip.name);
+                Object.DestroyImmediate(obsoleteClip, true);
+            }
+
             foreach (var stateName in requiredStates)
             {
                 var sourceMotion = FindMotion(source.layers[0].stateMachine, stateName);
@@ -96,17 +107,28 @@ namespace Odyssey.Editor.Gameplay
                     throw new InvalidOperationException($"官方 Spitter Animator 中未找到动作状态“{stateName}”。");
                 }
 
-                var motion = new AnimationClip { name = "Spitter_" + stateName };
-                EditorUtility.CopySerialized(sourceClip, motion);
-                motion.name = "Spitter_" + stateName;
-                AnimationUtility.SetAnimationEvents(motion, Array.Empty<AnimationEvent>());
-                AssetDatabase.AddObjectToAsset(motion, controller);
-                var state = stateMachine.AddState(stateName);
-                state.motion = motion;
-                if (stateName == "Fleeing")
+                var clipName = "Spitter_" + stateName;
+                if (!generatedClips.TryGetValue(clipName, out var motion))
                 {
-                    state.speed = 1.1f;
+                    motion = new AnimationClip { name = clipName };
+                    AssetDatabase.AddObjectToAsset(motion, controller);
+                    generatedClips.Add(clipName, motion);
                 }
+
+                EditorUtility.CopySerialized(sourceClip, motion);
+                motion.name = clipName;
+                AnimationUtility.SetAnimationEvents(motion, Array.Empty<AnimationEvent>());
+                var state = stateMachine.states
+                                .FirstOrDefault(child => child.state.name == stateName)
+                                .state ??
+                            stateMachine.AddState(stateName);
+                foreach (var transition in state.transitions.ToArray())
+                {
+                    state.RemoveTransition(transition);
+                }
+
+                state.motion = motion;
+                state.speed = stateName == "Fleeing" ? 1.1f : 1f;
             }
 
             stateMachine.defaultState = stateMachine.states.First(child => child.state.name == "Idle").state;
@@ -294,66 +316,219 @@ namespace Odyssey.Editor.Gameplay
                 .Where(enemy => enemy.ConfigId == "chomper")
                 .OrderBy(enemy => player == null ? 0f : Vector3.Distance(player.transform.position, enemy.transform.position))
                 .ToArray();
-            if (player == null || existingEnemies.Length < 2)
+            if (player == null || existingEnemies.Length < 4)
             {
-                throw new InvalidOperationException("Level_01 必须包含玩家和至少两个 Chomper，才能搭建玩法切片。");
+                throw new InvalidOperationException("Level_01 必须包含玩家和至少四个 Chomper，才能搭建两组玩法切片。");
             }
 
-            var nearEnemies = existingEnemies.Take(2).ToArray();
-            for (var index = 2; index < existingEnemies.Length; index++)
+            var selectedEnemies = existingEnemies.Take(4).ToArray();
+            for (var index = 4; index < existingEnemies.Length; index++)
             {
                 existingEnemies[index].gameObject.SetActive(false);
             }
 
-            nearEnemies[0].gameObject.SetActive(true);
-            nearEnemies[1].gameObject.SetActive(true);
+            foreach (var enemy in selectedEnemies)
+            {
+                enemy.gameObject.SetActive(true);
+            }
 
-            var arenaCenter = (nearEnemies[0].transform.position + nearEnemies[1].transform.position) * 0.5f;
+            var groups = PairIntoNearestGroups(selectedEnemies)
+                .OrderBy(group => Vector3.Distance(player.transform.position, GetGroupCenter(group)))
+                .ToArray();
+            var root = new GameObject(SliceRootName);
+            root.transform.position = Vector3.zero;
+            for (var groupIndex = 0; groupIndex < groups.Length; groupIndex++)
+            {
+                BuildEncounterGroup(
+                    root.transform,
+                    scene,
+                    player,
+                    groups[groupIndex],
+                    spitterPrefab,
+                    groupIndex);
+            }
+
+            EditorSceneManager.MarkSceneDirty(scene);
+            EditorSceneManager.SaveScene(scene);
+        }
+
+        /// <summary>
+        /// 把四只既有 Chomper 按空间距离配成两组，避免按 Hierarchy 顺序把地图两端的怪物错误分到同一战区。
+        /// 四个点只有三种配对方式，直接枚举比引入通用聚类算法更清晰且更符合当前规模。
+        /// </summary>
+        private static IReadOnlyList<Enemy[]> PairIntoNearestGroups(IReadOnlyList<Enemy> enemies)
+        {
+            var pairings = new[]
+            {
+                new[] { 0, 1, 2, 3 },
+                new[] { 0, 2, 1, 3 },
+                new[] { 0, 3, 1, 2 }
+            };
+            var best = pairings
+                .OrderBy(pairing =>
+                    Vector3.Distance(enemies[pairing[0]].transform.position, enemies[pairing[1]].transform.position) +
+                    Vector3.Distance(enemies[pairing[2]].transform.position, enemies[pairing[3]].transform.position))
+                .First();
+            return new[]
+            {
+                new[] { enemies[best[0]], enemies[best[1]] },
+                new[] { enemies[best[2]], enemies[best[3]] }
+            };
+        }
+
+        private static Vector3 GetGroupCenter(IReadOnlyList<Enemy> group)
+        {
+            return (group[0].transform.position + group[1].transform.position) * 0.5f;
+        }
+
+        /// <summary>
+        /// 创建一组独立的触发器、两只近战怪、一只远程怪、巡逻路线、HUD 和蓝色出口。
+        /// 每组只通过实例事件协作，完成第一组不会错误开启第二组的门。
+        /// </summary>
+        private static void BuildEncounterGroup(
+            Transform container,
+            UnityEngine.SceneManagement.Scene scene,
+            PlayerController player,
+            Enemy[] chompers,
+            GameObject spitterPrefab,
+            int groupIndex)
+        {
+            var displayName = groupIndex == 0 ? "第一战区" : "第二战区";
+            var groupRoot = new GameObject(groupIndex == 0 ? "第一战斗组" : "第二战斗组");
+            groupRoot.transform.SetParent(container, false);
+            var arenaCenter = GetGroupCenter(chompers);
             var awayFromPlayer = Vector3.ProjectOnPlane(arenaCenter - player.transform.position, Vector3.up).normalized;
             if (awayFromPlayer == Vector3.zero)
             {
                 awayFromPlayer = player.transform.forward;
             }
 
-            // 远程怪必须和本次启用的两只近战怪位于同一块可导航战斗区域。
-            // 旧场景中第三只 Chomper 可能只是远处的展示摆件，复用其坐标会把 Spitter 放到孤立或过期的 NavMesh 上。
             var desiredSpitterPosition =
-                arenaCenter + awayFromPlayer * 4f + Vector3.Cross(Vector3.up, awayFromPlayer) * 2.5f;
-            desiredSpitterPosition = ResolveSpitterNavMeshPosition(
-                desiredSpitterPosition,
-                nearEnemies[1].transform.position);
-
-            var encounterCenter = (player.transform.position + arenaCenter) * 0.5f;
-            var root = new GameObject(SliceRootName);
-            root.transform.position = encounterCenter;
+                arenaCenter + awayFromPlayer * 3.5f + Vector3.Cross(Vector3.up, awayFromPlayer) * 2f;
+            desiredSpitterPosition = ResolveSpitterNavMeshPosition(desiredSpitterPosition, chompers[1].transform.position);
             var spitterObject = (GameObject)PrefabUtility.InstantiatePrefab(spitterPrefab, scene);
-            spitterObject.name = "Spitter_远程威胁";
+            spitterObject.name = $"{displayName}_Spitter_远程威胁";
             spitterObject.transform.position = desiredSpitterPosition;
-            // NavMeshAgent 保持场景根对象，避免非零父节点影响 Agent 绑定；幂等重建通过 configId 显式删除旧实例。
             var spitter = spitterObject.GetComponent<Enemy>();
 
-            var trigger = root.AddComponent<BoxCollider>();
-            trigger.isTrigger = true;
-            trigger.size = new Vector3(
-                Mathf.Abs(arenaCenter.x - player.transform.position.x) + 10f,
-                4f,
-                Mathf.Abs(arenaCenter.z - player.transform.position.z) + 10f);
-
-            var encounter = root.AddComponent<CombatEncounterController>();
+            chompers[0].name = $"{displayName}_Chomper_1";
+            chompers[1].name = $"{displayName}_Chomper_2";
+            var encounter = groupRoot.AddComponent<CombatEncounterController>();
             var serializedEncounter = new SerializedObject(encounter);
+            serializedEncounter.FindProperty("displayName").stringValue = displayName;
             var participants = serializedEncounter.FindProperty("participants");
             participants.arraySize = 3;
-            participants.GetArrayElementAtIndex(0).objectReferenceValue = nearEnemies[0];
-            participants.GetArrayElementAtIndex(1).objectReferenceValue = nearEnemies[1];
+            participants.GetArrayElementAtIndex(0).objectReferenceValue = chompers[0];
+            participants.GetArrayElementAtIndex(1).objectReferenceValue = chompers[1];
             participants.GetArrayElementAtIndex(2).objectReferenceValue = spitter;
             serializedEncounter.ApplyModifiedPropertiesWithoutUndo();
 
-            BuildDoor(root.transform, encounter, arenaCenter, awayFromPlayer);
-            BuildHud(root.transform, encounter);
-            BuildFeedback(root.transform, encounter, player);
+            BuildEncounterTrigger(
+                groupRoot.transform,
+                encounter,
+                arenaCenter,
+                player.transform.position,
+                includePlayerSpawn: groupIndex == 0);
+            BuildPatrolRoute(groupRoot.transform, chompers[0], awayFromPlayer, 0);
+            BuildPatrolRoute(groupRoot.transform, chompers[1], awayFromPlayer, 1);
+            BuildPatrolRoute(groupRoot.transform, spitter, awayFromPlayer, 2);
+            BuildDoor(groupRoot.transform, encounter, arenaCenter, awayFromPlayer);
+            BuildHud(groupRoot.transform, encounter, groupIndex);
+            BuildFeedback(groupRoot.transform, encounter, player);
+        }
 
-            EditorSceneManager.MarkSceneDirty(scene);
-            EditorSceneManager.SaveScene(scene);
+        private static void BuildEncounterTrigger(
+            Transform parent,
+            CombatEncounterController encounter,
+            Vector3 arenaCenter,
+            Vector3 playerPosition,
+            bool includePlayerSpawn)
+        {
+            var triggerObject = new GameObject("玩家进入触发区");
+            triggerObject.transform.SetParent(parent, true);
+            var planarCenter = includePlayerSpawn
+                ? (arenaCenter + playerPosition) * 0.5f
+                : arenaCenter;
+            triggerObject.transform.position = planarCenter + Vector3.up * 1.5f;
+            var trigger = triggerObject.AddComponent<BoxCollider>();
+            trigger.isTrigger = true;
+            trigger.size = includePlayerSpawn
+                ? new Vector3(
+                    Mathf.Abs(arenaCenter.x - playerPosition.x) + 6f,
+                    4f,
+                    Mathf.Abs(arenaCenter.z - playerPosition.z) + 6f)
+                : new Vector3(16f, 4f, 16f);
+            var body = triggerObject.AddComponent<Rigidbody>();
+            body.isKinematic = true;
+            body.useGravity = false;
+            var adapter = triggerObject.AddComponent<CombatEncounterTrigger>();
+            var serializedTrigger = new SerializedObject(adapter);
+            serializedTrigger.FindProperty("encounter").objectReferenceValue = encounter;
+            serializedTrigger.ApplyModifiedPropertiesWithoutUndo();
+        }
+
+        /// <summary>
+        /// 为一只怪物创建三个可视化巡逻点并写入 EnemyPatrolRoute；所有点都按该 Agent 类型采样到 NavMesh。
+        /// </summary>
+        private static void BuildPatrolRoute(
+            Transform parent,
+            Enemy enemy,
+            Vector3 groupForward,
+            int participantIndex)
+        {
+            var routeRoot = new GameObject($"巡逻路线_{enemy.name}");
+            routeRoot.transform.SetParent(parent, true);
+            routeRoot.transform.position = Vector3.zero;
+            var side = Vector3.Cross(Vector3.up, groupForward).normalized;
+            var directionSign = participantIndex % 2 == 0 ? 1f : -1f;
+            var desiredPositions = new[]
+            {
+                enemy.transform.position,
+                enemy.transform.position + side * (2.5f * directionSign),
+                enemy.transform.position + groupForward * 2f - side * (1.8f * directionSign)
+            };
+            var points = new Transform[desiredPositions.Length];
+            var agent = enemy.GetComponent<NavMeshAgent>();
+            if (agent == null)
+            {
+                throw new InvalidOperationException($"怪物“{enemy.name}”缺少 NavMeshAgent，无法创建巡逻路线。");
+            }
+
+            var queryFilter = new NavMeshQueryFilter
+            {
+                agentTypeID = agent.agentTypeID,
+                areaMask = agent.areaMask
+            };
+            for (var pointIndex = 0; pointIndex < desiredPositions.Length; pointIndex++)
+            {
+                if (!NavMesh.SamplePosition(desiredPositions[pointIndex], out var hit, 4f, queryFilter))
+                {
+                    throw new InvalidOperationException($"无法为怪物“{enemy.name}”的巡逻点 {pointIndex + 1} 找到 NavMesh。");
+                }
+
+                var pointObject = new GameObject($"巡逻点_{pointIndex + 1}");
+                pointObject.transform.SetParent(routeRoot.transform, true);
+                pointObject.transform.position = hit.position;
+                points[pointIndex] = pointObject.transform;
+            }
+
+            var route = enemy.GetComponent<EnemyPatrolRoute>();
+            if (route == null)
+            {
+                route = enemy.gameObject.AddComponent<EnemyPatrolRoute>();
+            }
+
+            var serializedRoute = new SerializedObject(route);
+            var patrolPoints = serializedRoute.FindProperty("patrolPoints");
+            patrolPoints.arraySize = points.Length;
+            for (var index = 0; index < points.Length; index++)
+            {
+                patrolPoints.GetArrayElementAtIndex(index).objectReferenceValue = points[index];
+            }
+
+            serializedRoute.FindProperty("waitDuration").floatValue = 0.65f + participantIndex * 0.15f;
+            serializedRoute.ApplyModifiedPropertiesWithoutUndo();
+            EditorUtility.SetDirty(route);
         }
 
         /// <summary>
@@ -409,7 +584,7 @@ namespace Odyssey.Editor.Gameplay
             Vector3 forward)
         {
             var door = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            door.name = "战斗出口";
+            door.name = "蓝色战斗出口_击败本组敌人后开启";
             door.transform.SetParent(parent, true);
             door.transform.position = arenaCenter + forward * 7f + Vector3.up * 2f;
             door.transform.rotation = Quaternion.LookRotation(forward);
@@ -430,7 +605,7 @@ namespace Odyssey.Editor.Gameplay
             serializedDoor.ApplyModifiedPropertiesWithoutUndo();
         }
 
-        private static void BuildHud(Transform parent, CombatEncounterController encounter)
+        private static void BuildHud(Transform parent, CombatEncounterController encounter, int displayIndex)
         {
             var canvasObject = new GameObject("战斗目标HUD", typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
             canvasObject.transform.SetParent(parent, false);
@@ -447,14 +622,14 @@ namespace Odyssey.Editor.Gameplay
             rect.anchorMin = new Vector2(0.5f, 1f);
             rect.anchorMax = new Vector2(0.5f, 1f);
             rect.pivot = new Vector2(0.5f, 1f);
-            rect.anchoredPosition = new Vector2(0f, -55f);
+            rect.anchoredPosition = new Vector2(0f, -55f - displayIndex * 44f);
             rect.sizeDelta = new Vector2(720f, 64f);
             var text = textObject.GetComponent<Text>();
             text.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
             text.fontSize = 30;
             text.alignment = TextAnchor.MiddleCenter;
             text.color = Color.white;
-            text.text = "进入战斗区域开始挑战";
+            text.text = $"{encounter.DisplayName}：进入区域，击败敌人后蓝色出口开启";
 
             var view = canvasObject.AddComponent<CombatEncounterView>();
             var serializedView = new SerializedObject(view);

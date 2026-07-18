@@ -10,9 +10,9 @@ namespace Odyssey.Encounters
     /// 把预先放置的场景敌人装配为一次可开始、可统计、可完成的战斗遭遇，并发布只读结果事件。
     /// 采用场景级 Controller 与观察者模式；它不是单例，不生成波次，也不直接控制 UI、门或音效。
     /// </summary>
-    [RequireComponent(typeof(Collider))]
     public sealed class CombatEncounterController : MonoBehaviour
     {
+        [SerializeField] private string displayName = "战斗区域";
         [SerializeField] private Enemy[] participants = Array.Empty<Enemy>();
         [SerializeField] private bool startOnSceneLoad;
 
@@ -20,6 +20,7 @@ namespace Odyssey.Encounters
         private CombatEncounterProgress _progress;
 
         public IReadOnlyList<Enemy> Participants => participants;
+        public string DisplayName => string.IsNullOrWhiteSpace(displayName) ? "战斗区域" : displayName;
         public CombatEncounterState State => _progress?.State ?? CombatEncounterState.Waiting;
         public int RemainingEnemies => _progress?.RemainingEnemies ?? participants.Length;
 
@@ -67,14 +68,6 @@ namespace Odyssey.Encounters
                 {
                     enemy.Defeated -= HandleEnemyDefeated;
                 }
-            }
-        }
-
-        private void OnTriggerEnter(Collider other)
-        {
-            if (other.GetComponentInParent<Odyssey.Characters.Player.PlayerController>() != null)
-            {
-                StartEncounter();
             }
         }
 

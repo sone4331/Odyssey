@@ -2,6 +2,7 @@ using Cinemachine;
 using Odyssey.Characters.Enemies;
 using Odyssey.Characters.Player;
 using Odyssey.Gameplay.Combat;
+using Odyssey.Gameplay.Encounters;
 using UnityEngine;
 
 namespace Odyssey.Encounters
@@ -74,7 +75,9 @@ namespace Odyssey.Encounters
 
         private void HandleDamageEvaded(DamageRequest _)
         {
-            if (player == null || Time.unscaledTime < _nextEvadeFeedbackTime)
+            if (player == null || encounter == null ||
+                encounter.State != CombatEncounterState.Active ||
+                Time.unscaledTime < _nextEvadeFeedbackTime)
             {
                 return;
             }
