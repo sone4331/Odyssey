@@ -299,6 +299,8 @@ namespace Odyssey.Tests.PlayMode
             var player = Object.FindFirstObjectByType<PlayerController>();
             Assert.That(player, Is.Not.Null, "场景中未找到玩家");
             Assert.That(player.InputReader, Is.Not.Null, "玩家缺少输入适配器");
+            var placement = player.GetComponent<Odyssey.Characters.Player.PlayerFootPlacementController>();
+            Assert.That(placement, Is.Not.Null, "玩家缺少脚部贴地控制器");
 
             SetJumpPressed(player, true);
             yield return new WaitForSeconds(0.1f);
@@ -332,8 +334,18 @@ namespace Odyssey.Tests.PlayMode
                 "玩家落地后仍停留在空中移动状态");
             yield return null;
             AssertAnimatorState(player.Animator, "Landing");
+            Assert.That(placement.CurrentWeight, Is.LessThan(0.1f),
+                "Landing 姿势尚未结束时脚部 Rig 提前锁定了双脚 Target");
             yield return new WaitForSeconds(0.4f);
             AssertAnimatorState(player.Animator, "Locomotion");
+            Assert.That(placement.CurrentWeight, Is.GreaterThan(0.9f),
+                "回到稳定 Locomotion 后脚部 Rig 未重新校准并启用");
+
+            var bones = player.GetComponentsInChildren<Transform>(true);
+            var leftFoot = System.Array.Find(bones, transform => transform.name == "Ellen_Left_Foot");
+            var rightFoot = System.Array.Find(bones, transform => transform.name == "Ellen_Right_Foot");
+            Assert.That(Vector3.Distance(leftFoot.position, rightFoot.position), Is.GreaterThan(0.4f),
+                "Landing 返回 Locomotion 后脚部 Target 仍锁在落地坐标，导致双腿劈叉");
         }
 
         [UnityTest]

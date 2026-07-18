@@ -10,6 +10,8 @@ namespace Odyssey.Characters.Player
     [DefaultExecutionOrder(100)]
     public sealed class PlayerFootPlacementController : MonoBehaviour
     {
+        private static readonly int LocomotionStateHash = Animator.StringToHash("Locomotion");
+
         private const float RayStartHeight = 0.25f;
         private const float RayDistance = 0.65f;
         private const float SoleOffset = 0.03f;
@@ -57,7 +59,8 @@ namespace Odyssey.Characters.Player
 
             var shouldPlaceFeet = player.LocomotionState == Odyssey.Gameplay.Characters.PlayerLocomotionStateId.Grounded &&
                                   player.ActionState == Odyssey.Gameplay.Characters.PlayerActionStateId.Free &&
-                                  player.CurrentPlanarSpeed <= MaximumPlacementSpeed;
+                                  player.CurrentPlanarSpeed <= MaximumPlacementSpeed &&
+                                  IsStableLocomotionPose();
             if (shouldPlaceFeet && !_wasPlacementRequested)
             {
                 // 在 Rig 权重仍接近零时捕获原动画脚位，保证 IK 从当前姿势无缝接管。
@@ -125,6 +128,20 @@ namespace Odyssey.Characters.Player
             // 只让 Two Bone IK 修正位置，保留动画剪辑原本的脚掌旋转，避免整条腿被扭转。
             SetPositionOnly(leftFootConstraint);
             SetPositionOnly(rightFootConstraint);
+        }
+
+        /// <summary>
+        /// 只允许稳定的 Locomotion 姿势成为脚部 IK 基准。
+        /// Landing 或交叉淡化期间双脚会大幅前后展开；若此时锁定 Target，回到待机后就会被拉成劈叉。
+        /// </summary>
+        private bool IsStableLocomotionPose()
+        {
+            if (player.Animator == null || player.Animator.IsInTransition(0))
+            {
+                return false;
+            }
+
+            return player.Animator.GetCurrentAnimatorStateInfo(0).shortNameHash == LocomotionStateHash;
         }
 
         private static void SetPositionOnly(TwoBoneIKConstraint constraint)
