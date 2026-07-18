@@ -281,65 +281,35 @@ namespace Odyssey.Tests.PlayMode
                 .OrderBy(encounter => encounter.DisplayName)
                 .ToArray();
             Assert.That(encounters.Length, Is.EqualTo(2), "场景应包含位于不同位置的两组独立遭遇");
-            var firstTrigger = encounters[0].GetComponentInChildren<CombatEncounterTrigger>();
-            var secondTrigger = encounters[1].GetComponentInChildren<CombatEncounterTrigger>();
-            Assert.That(firstTrigger, Is.Not.Null);
-            Assert.That(secondTrigger, Is.Not.Null);
-            Assert.That(Vector3.Distance(firstTrigger.transform.position, secondTrigger.transform.position),
+            var encounterCenters = encounters
+                .Select(encounter => encounter.Participants.Aggregate(
+                    Vector3.zero,
+                    (sum, enemy) => sum + enemy.transform.position) / encounter.Participants.Count)
+                .ToArray();
+            Assert.That(Vector3.Distance(encounterCenters[0], encounterCenters[1]),
                 Is.GreaterThan(10f),
                 "两组遭遇仍堆在地图同一区域，没有形成分段玩法");
             yield return null;
-            Assert.That(encounters.Any(encounter =>
+            Assert.That(encounters.All(encounter =>
                     encounter.State == Odyssey.Gameplay.Encounters.CombatEncounterState.Active),
                 Is.True,
-                "玩家出生在第一战区时，带刚体的 Trigger 没有自动激活遭遇");
-            var waitingEncounter = encounters.FirstOrDefault(encounter =>
-                encounter.State == Odyssey.Gameplay.Encounters.CombatEncounterState.Waiting);
-            Assert.That(waitingEncounter, Is.Not.Null, "第二战区不应在玩家尚未到达时提前激活");
-            var patrolStartPositions = waitingEncounter.Participants
+                "战区统计没有在场景开始后进入 Active");
+            var patrolStartPositions = encounters[1].Participants
                 .Select(enemy => enemy.transform.position)
                 .ToArray();
             yield return new WaitForSeconds(1.2f);
-            Assert.That(waitingEncounter.Participants.Select((enemy, index) =>
+            Assert.That(encounters[1].Participants.Select((enemy, index) =>
                     Vector3.Distance(enemy.transform.position, patrolStartPositions[index]) > 0.05f ||
                     enemy.GetComponent<UnityEngine.AI.NavMeshAgent>().hasPath).Any(moving => moving),
                 Is.True,
-                "等待中的第二战区怪物没有沿巡逻点产生导航移动");
+                "未靠近第二战区时，怪物没有自主沿巡逻网络移动");
 
             foreach (var encounter in encounters)
             {
                 Assert.That(encounter.Participants.Count, Is.EqualTo(3),
                     $"{encounter.DisplayName}应由两名近战怪和一名远程怪组成");
-                var trigger = encounter.GetComponentInChildren<CombatEncounterTrigger>();
-                Assert.That(trigger, Is.Not.Null, $"{encounter.DisplayName}缺少专用物理触发适配器");
-                Assert.That(trigger.GetComponent<Rigidbody>().isKinematic, Is.True,
-                    $"{encounter.DisplayName}触发区没有使用运动学刚体保证 Trigger 消息");
-                var door = encounter.GetComponentInChildren<CombatEncounterDoor>();
-                Assert.That(door, Is.Not.Null, $"{encounter.DisplayName}缺少蓝色战斗出口");
-                var closedDoorPosition = door.transform.position;
-                Assert.That(door.GetComponent<Collider>().enabled, Is.True,
-                    $"{encounter.DisplayName}尚未完成时蓝色出口没有阻挡玩家");
-
-                if (encounter.State == Odyssey.Gameplay.Encounters.CombatEncounterState.Waiting)
-                {
-                    foreach (var enemy in encounter.Participants)
-                    {
-                        Assert.That(enemy.CurrentGoal, Is.EqualTo(EnemyGoal.Patrol),
-                            $"等待中的{encounter.DisplayName}怪物没有沿巡逻点移动");
-                    }
-                }
-
-                var startCount = 0;
                 var completionCount = 0;
-                encounter.EncounterStarted += () => startCount++;
                 encounter.EncounterCompleted += () => completionCount++;
-                var startedByTest = encounter.State == Odyssey.Gameplay.Encounters.CombatEncounterState.Waiting;
-                if (startedByTest)
-                {
-                    encounter.StartEncounter();
-                    encounter.StartEncounter();
-                    Assert.That(startCount, Is.EqualTo(1), "复合碰撞体导致遭遇战重复开始");
-                }
 
                 yield return null;
                 foreach (var enemy in encounter.Participants)
@@ -348,7 +318,9 @@ namespace Odyssey.Tests.PlayMode
                     Assert.That(route, Is.Not.Null, $"遭遇参与者“{enemy.name}”缺少巡逻路线组件");
                     Assert.That(route.HasValidRoute, Is.True,
                         $"遭遇参与者“{enemy.name}”没有有效巡逻点");
-                    Assert.That(route.PatrolPoints.Count, Is.EqualTo(3));
+                    Assert.That(route.PatrolPoints.Count, Is.EqualTo(6));
+                    Assert.That(route.MaximumPointDistance, Is.GreaterThanOrEqualTo(12f),
+                        $"遭遇参与者“{enemy.name}”的巡逻网络没有覆盖主要战区");
                     var agent = enemy.GetComponent<UnityEngine.AI.NavMeshAgent>();
                     Assert.That(agent.enabled && agent.isOnNavMesh, Is.True,
                         $"遭遇参与者“{enemy.name}”没有稳定绑定到 NavMesh");
@@ -365,12 +337,105 @@ namespace Odyssey.Tests.PlayMode
                 Assert.That(completionCount, Is.EqualTo(1),
                     $"{encounter.DisplayName}全部敌人击败后没有且仅完成一次");
                 Assert.That(encounter.RemainingEnemies, Is.Zero);
-                yield return new WaitForSeconds(1.3f);
-                Assert.That(door.transform.position.y, Is.GreaterThan(closedDoorPosition.y + 3.9f),
-                    $"{encounter.DisplayName}完成后蓝色出口没有抬起");
-                Assert.That(door.GetComponent<Collider>().enabled, Is.False,
-                    $"{encounter.DisplayName}完成后蓝色出口仍阻挡玩家");
             }
+
+            Assert.That(GameObject.Find("蓝色战斗出口_击败本组敌人后开启"), Is.Null,
+                "场景仍残留没有玩法语义的蓝色测试板");
+        }
+
+        [UnityTest]
+        public IEnumerator FirstEncounterGate_RequiresClearThenFreshPressurePlateEntry()
+        {
+            var player = Object.FindFirstObjectByType<PlayerController>();
+            var encounter = Object.FindObjectsByType<CombatEncounterController>(
+                    FindObjectsInactive.Exclude,
+                    FindObjectsSortMode.None)
+                .Single(candidate => candidate.DisplayName == "第一战区");
+            var plate = Object.FindFirstObjectByType<EncounterClearancePressurePlate>();
+            var gate = Object.FindFirstObjectByType<EncounterClearanceGate>();
+            Assert.That(plate, Is.Not.Null, "场景没有用项目自有组件接管原踏板");
+            Assert.That(gate, Is.Not.Null, "场景没有用项目自有组件接管原隔离门");
+
+            InvokeTrigger(plate, "OnTriggerEnter", player.Controller);
+            Assert.That(gate.IsOpening || gate.IsOpen, Is.False, "清怪前踩踏板错误开启了隔离门");
+
+            foreach (var enemy in encounter.Participants)
+            {
+                enemy.TakeDamage(enemy.CurrentHealth);
+            }
+
+            yield return null;
+            Assert.That(encounter.State, Is.EqualTo(Odyssey.Gameplay.Encounters.CombatEncounterState.Completed));
+            InvokeTrigger(plate, "OnTriggerEnter", player.Controller);
+            Assert.That(gate.IsOpening || gate.IsOpen, Is.False, "玩家站在板上清怪时隔离门自动开启");
+
+            InvokeTrigger(plate, "OnTriggerExit", player.Controller);
+            InvokeTrigger(plate, "OnTriggerEnter", player.Controller);
+            Assert.That(gate.IsOpening, Is.True, "清怪后重新踩入踏板没有开启隔离门");
+        }
+
+        [UnityTest]
+        public IEnumerator SceneEnemy_TransitionsFromPatrolToChaseAndAttack()
+        {
+            var player = Object.FindFirstObjectByType<PlayerController>();
+            var encounter = Object.FindObjectsByType<CombatEncounterController>(
+                    FindObjectsInactive.Exclude,
+                    FindObjectsSortMode.None)
+                .OrderBy(candidate => candidate.DisplayName)
+                .First();
+            var enemy = encounter.Participants.First(candidate => candidate.ConfigId == "chomper");
+            var agent = enemy.GetComponent<UnityEngine.AI.NavMeshAgent>();
+            Assert.That(agent.enabled && agent.isOnNavMesh, Is.True, "场景近战怪没有绑定 NavMesh");
+
+            var chaseDirection = Vector3.ProjectOnPlane(player.transform.position - enemy.transform.position, Vector3.up);
+            if (chaseDirection.sqrMagnitude < 0.01f)
+            {
+                chaseDirection = enemy.transform.forward;
+            }
+
+            var queryFilter = new UnityEngine.AI.NavMeshQueryFilter
+            {
+                agentTypeID = agent.agentTypeID,
+                areaMask = agent.areaMask
+            };
+            Assert.That(UnityEngine.AI.NavMesh.SamplePosition(
+                    enemy.transform.position + chaseDirection.normalized * 5f,
+                    out var chasePoint,
+                    4f,
+                    queryFilter),
+                Is.True,
+                "近战怪附近找不到用于追击回归的玩家落点");
+            MovePlayer(player, chasePoint.position);
+            yield return new WaitForSeconds(0.15f);
+            Assert.That(enemy.CurrentGoal, Is.EqualTo(EnemyGoal.Chase),
+                "玩家进入追击范围后，场景怪物没有从 Patrol 切换到 Chase");
+            var distanceBeforeChase = Vector3.Distance(enemy.transform.position, player.transform.position);
+            yield return new WaitForSeconds(0.6f);
+            Assert.That(agent.hasPath, Is.True, "Chase 目标已经产生，但 NavMeshAgent 没有提交追击路径");
+            Assert.That(Vector3.Distance(enemy.transform.position, player.transform.position),
+                Is.LessThan(distanceBeforeChase - 0.1f),
+                "怪物进入 Chase 后没有实际缩短与玩家的距离");
+
+            Assert.That(UnityEngine.AI.NavMesh.SamplePosition(
+                    enemy.transform.position + chaseDirection.normalized * 1.2f,
+                    out var attackPoint,
+                    2f,
+                    queryFilter),
+                Is.True,
+                "近战怪附近找不到用于攻击回归的玩家落点");
+            MovePlayer(player, attackPoint.position);
+            var healthBeforeAttack = player.CurrentHealth;
+            yield return new WaitForSeconds(0.15f);
+            Assert.That(enemy.CurrentGoal, Is.EqualTo(EnemyGoal.Attack),
+                "玩家进入攻击范围后，场景怪物没有从 Chase 切换到 Attack");
+            yield return new WaitForSeconds(0.35f);
+            Assert.That(player.CurrentHealth, Is.LessThan(healthBeforeAttack),
+                "怪物进入 Attack 后没有在配置前摇结束时结算伤害");
+
+            MovePlayer(player, enemy.transform.position + Vector3.forward * (enemy.ForgetRange + 3f));
+            yield return new WaitForSeconds(0.25f);
+            Assert.That(enemy.CurrentGoal, Is.EqualTo(EnemyGoal.Patrol),
+                "玩家脱离丢失范围后，怪物没有放弃目标并恢复巡逻");
         }
 
         [UnityTest]
@@ -612,7 +677,7 @@ namespace Odyssey.Tests.PlayMode
         }
 
         [UnityTest]
-        public IEnumerator EnemyRuntime_TransitionsThroughChaseAttackAndRetreat()
+        public IEnumerator EnemyRuntime_TransitionsThroughChaseAttackAndTargetLoss()
         {
             var player = Object.FindFirstObjectByType<PlayerController>();
             Assert.That(player, Is.Not.Null, "场景中未找到 AI 感知目标");
@@ -628,11 +693,10 @@ namespace Odyssey.Tests.PlayMode
             yield return null;
             Assert.That(enemy.CurrentGoal, Is.EqualTo(EnemyGoal.Attack));
 
-            enemy.TakeDamage(2);
-            yield return new WaitForSeconds(0.6f);
-            Assert.That(enemy.CurrentHealth, Is.EqualTo(1));
-            Assert.That(enemy.CurrentGoal, Is.EqualTo(EnemyGoal.Retreat),
-                "默认三点生命敌人在剩余一点生命时未进入撤退目标");
+            root.transform.position = player.transform.position + Vector3.forward * 20f;
+            yield return null;
+            Assert.That(enemy.CurrentGoal, Is.EqualTo(EnemyGoal.Idle),
+                "无巡逻路线的测试怪物在目标丢失后没有回到待机");
 
             Object.Destroy(root);
             yield return null;
@@ -652,6 +716,25 @@ namespace Odyssey.Tests.PlayMode
                 $"{context ?? "动画状态检查"}：Animator 未进入或过渡到状态“{expectedState}”。" +
                 $"当前哈希={current.shortNameHash}，下一状态哈希={next.shortNameHash}，" +
                 $"是否过渡={animator.IsInTransition(0)}，当前进度={current.normalizedTime:F2}。");
+        }
+
+        private static void MovePlayer(PlayerController player, Vector3 position)
+        {
+            player.Controller.enabled = false;
+            player.transform.position = position;
+            player.Controller.enabled = true;
+        }
+
+        private static void InvokeTrigger(
+            EncounterClearancePressurePlate plate,
+            string methodName,
+            Collider collider)
+        {
+            var method = typeof(EncounterClearancePressurePlate).GetMethod(
+                methodName,
+                BindingFlags.Instance | BindingFlags.NonPublic);
+            Assert.That(method, Is.Not.Null, $"踏板缺少物理回调“{methodName}”");
+            method.Invoke(plate, new object[] { collider });
         }
 
         private static void SetJumpPressed(PlayerController player, bool pressed)

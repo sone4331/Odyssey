@@ -7,8 +7,7 @@ internal static class Program
         GameplayTagSpecs.Register();
         AbilitySystemSpecs.Register();
         HealthSpecs.Register();
-        UtilityGoalSelectorSpecs.Register();
-        EnemyDecisionSpecs.Register();
+        EnemyBehaviorTreeSpecs.Register();
         SaveMigrationSpecs.Register();
         AtomicFileSaveServiceSpecs.Register();
         ConfigDatabaseSpecs.Register();

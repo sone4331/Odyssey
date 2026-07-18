@@ -37,7 +37,7 @@ README、工程文档、XML 注释、Unity 菜单、Inspector 标题与提示、
 
 ```text
 refactor(combat): 拆分玩家战斗职责
-feat(ai): 增加可解释的 Utility 决策
+feat(ai): 增加可解释的轻量行为树
 test(save): 补充存档迁移回归测试
 docs(architecture): 完善中文架构说明
 ```

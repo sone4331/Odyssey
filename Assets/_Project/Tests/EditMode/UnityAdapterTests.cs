@@ -23,6 +23,24 @@ namespace Odyssey.Tests
 {
     public sealed class UnityAdapterTests
     {
+        private sealed class BehaviorTestContext
+        {
+            public bool IsHit { get; set; }
+        }
+
+        private sealed class RecordingEnemyActions : IEnemyBehaviorActions
+        {
+            public EnemyGoal LastGoal { get; private set; } = EnemyGoal.Idle;
+
+            public BehaviorStatus Tick(EnemyGoal goal, float currentTime, float attackCooldown, float deltaTime)
+            {
+                LastGoal = goal;
+                return BehaviorStatus.Running;
+            }
+
+            public void Abort(EnemyGoal goal) { }
+        }
+
         [Test]
         public void JsonSaveCodec_RoundTripsSerializableData()
         {
@@ -99,13 +117,59 @@ namespace Odyssey.Tests
         }
 
         [Test]
-        public void UtilitySelector_PicksHighestScore()
+        public void ReactiveSelector_InterruptsLowerPriorityRunningBranch()
         {
-            var selector = new UtilityGoalSelector<string, float>(
-                new UtilityGoal<string, float>("patrol", _ => true, _ => 0.1f),
-                new UtilityGoal<string, float>("chase", _ => true, _ => 0.9f));
+            var context = new BehaviorTestContext();
+            var patrolAbortCount = 0;
+            var root = new ReactiveSelector<BehaviorTestContext>(
+                "测试根节点",
+                new Sequence<BehaviorTestContext>(
+                    "受击分支",
+                    new ConditionNode<BehaviorTestContext>("正在受击", value => value.IsHit),
+                    new ActionNode<BehaviorTestContext>("播放受击", _ => BehaviorStatus.Running)),
+                new ActionNode<BehaviorTestContext>(
+                    "日常巡逻",
+                    _ => BehaviorStatus.Running,
+                    _ => patrolAbortCount++));
+            var runner = new BehaviorTreeRunner<BehaviorTestContext>(root);
 
-            Assert.That(selector.Select(0f).Goal, Is.EqualTo("chase"));
+            runner.Tick(context);
+            Assert.That(runner.CurrentPath, Does.Contain("日常巡逻"));
+
+            context.IsHit = true;
+            runner.Tick(context);
+
+            Assert.That(patrolAbortCount, Is.EqualTo(1), "高优先级受击分支没有中断正在运行的巡逻动作");
+            Assert.That(runner.CurrentPath, Does.Contain("播放受击"));
+        }
+
+        [Test]
+        public void EnemyBehaviorTree_SelectsPatrolChaseAttackAndRangedRetreat()
+        {
+            var blackboard = new EnemyBlackboard();
+            var actions = new RecordingEnemyActions();
+            var model = new EnemyBehaviorModel(blackboard, actions);
+
+            UpdateEnemyBlackboard(blackboard, hasTarget: false, distance: 20f);
+            model.Tick(0f, 2f, 0.02f);
+            Assert.That(actions.LastGoal, Is.EqualTo(EnemyGoal.Patrol));
+
+            UpdateEnemyBlackboard(blackboard, hasTarget: true, distance: 5f);
+            model.Tick(0.1f, 2f, 0.02f);
+            Assert.That(actions.LastGoal, Is.EqualTo(EnemyGoal.Chase));
+
+            UpdateEnemyBlackboard(blackboard, hasTarget: true, distance: 1.5f);
+            model.Tick(0.2f, 2f, 0.02f);
+            Assert.That(actions.LastGoal, Is.EqualTo(EnemyGoal.Attack));
+
+            UpdateEnemyBlackboard(
+                blackboard,
+                hasTarget: true,
+                distance: 2f,
+                attackMode: EnemyAttackMode.Projectile,
+                minimumAttackRange: 3.5f);
+            model.Tick(0.3f, 2f, 0.02f);
+            Assert.That(actions.LastGoal, Is.EqualTo(EnemyGoal.Retreat));
         }
 
         [Test]
@@ -211,6 +275,29 @@ namespace Odyssey.Tests
             Assert.That(progress.RegisterDefeat(), Is.True);
             Assert.That(progress.State, Is.EqualTo(CombatEncounterState.Completed));
             Assert.That(progress.RegisterDefeat(), Is.False);
+        }
+
+        private static void UpdateEnemyBlackboard(
+            EnemyBlackboard blackboard,
+            bool hasTarget,
+            float distance,
+            EnemyAttackMode attackMode = EnemyAttackMode.Melee,
+            float minimumAttackRange = 0f)
+        {
+            blackboard.UpdatePerception(
+                hasTarget,
+                distance,
+                10f,
+                12.5f,
+                attackMode == EnemyAttackMode.Projectile ? 8f : 2f,
+                minimumAttackRange,
+                1f,
+                attackReady: true,
+                attackInProgress: false,
+                isHitReacting: false,
+                isDead: false,
+                hasPatrolRoute: true,
+                attackMode);
         }
 
         [Test]

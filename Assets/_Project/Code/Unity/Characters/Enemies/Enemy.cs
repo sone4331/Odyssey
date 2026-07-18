@@ -10,8 +10,8 @@ using UnityEngine.Serialization;
 namespace Odyssey.Characters.Enemies
 {
     /// <summary>
-    /// 怪物角色的 Unity 门面，负责装配 Health、Perception、Blackboard、Utility 决策和 Action 执行层。
-    /// 采用 Facade 与 Composition Root 模式保留现有场景脚本 GUID；本类只编排数据流和事件，不再直接实现追击决策与导航细节。
+    /// 怪物角色的 Unity 门面，负责装配 Health、Perception、Blackboard、行为树和 Action 执行层。
+    /// 采用 Facade 与 Composition Root 模式保留现有场景脚本 GUID；本类只编排数据流和事件，不直接实现追击决策与导航细节。
     /// </summary>
     public sealed class Enemy : MonoBehaviour, IConfigTarget<EnemyConfigData>, IDamageable
     {
@@ -43,26 +43,27 @@ namespace Odyssey.Characters.Enemies
         private Health _health;
         private EnemyConfigData _appliedConfig;
         private EnemyBlackboard _blackboard;
-        private EnemyDecisionModel _decisionModel;
+        private EnemyBehaviorModel _behaviorModel;
         private EnemyPerception _perception;
         private EnemyActionRuntime _actions;
         private EnemyPatrolRoute _patrolRoute;
+        private bool _meleeDamageCommitted;
         private bool _isDead;
-        private bool _encounterActive = true;
         private Vector3 _deathFlyDirection;
         private float _deathFlySpeed;
 
         public string ConfigId => configId;
         public int CurrentHealth => _health?.Current ?? maxHealth;
         public EnemyGoal CurrentGoal => _blackboard?.CurrentGoal ?? EnemyGoal.Idle;
-        public float DecisionScore => _blackboard?.CurrentScore ?? 0f;
+        public string CurrentBehaviorPath => _blackboard?.CurrentBehaviorPath ?? "尚未运行";
+        public bool HasSensedTarget => _blackboard?.HasTarget ?? false;
         public float TargetDistance => _blackboard?.DistanceToTarget ?? float.MaxValue;
+        public float ForgetRange => _blackboard?.ForgetRange ?? ChaseRange * 1.25f;
         public float HealthRatio => _blackboard?.HealthRatio ?? 1f;
         public EnemyAttackMode AttackMode => _attackMode;
         public float MinimumAttackRange => _minimumAttackRange;
         public bool HasPatrolRoute => _patrolRoute != null && _patrolRoute.HasValidRoute;
         public string CurrentPatrolPointName => _patrolRoute == null ? "无" : _patrolRoute.CurrentPointName;
-        public bool IsEncounterActive => _encounterActive;
 
         /// <summary>
         /// 怪物完成死亡提交后发布的实例事件，遭遇控制器只依赖该事实统计进度，不轮询或控制怪物行为。
@@ -76,34 +77,14 @@ namespace Odyssey.Characters.Enemies
             RebuildHealth(maxHealth, maxHealth);
         }
 
+        private void Start()
+        {
+            EnsureNavigationReady();
+        }
+
         private void Update()
         {
-            if (_isDead)
-            {
-                UpdateDeathPresentation();
-                return;
-            }
-
-            if (_actions.TickLock(Time.deltaTime))
-            {
-                return;
-            }
-
-            if (!_encounterActive)
-            {
-                var waitingDecision = new EnemyDecision(
-                    HasPatrolRoute ? EnemyGoal.Patrol : EnemyGoal.Idle,
-                    HasPatrolRoute ? 0.2f : 0.1f);
-                _blackboard.CommitDecision(waitingDecision);
-                _actions.Execute(
-                    waitingDecision,
-                    null,
-                    Time.time,
-                    AttackCooldown,
-                    Time.deltaTime);
-                return;
-            }
-
+            _actions.TickTimers(Time.deltaTime);
             _perception.Sense(
                 _blackboard,
                 CurrentHealth,
@@ -112,16 +93,21 @@ namespace Odyssey.Characters.Enemies
                 AttackRange,
                 _minimumAttackRange,
                 _actions.CanAttack(Time.time, AttackCooldown),
-                HasPatrolRoute);
-
-            var decision = _decisionModel.Decide(_blackboard.Context);
-            _blackboard.CommitDecision(decision);
-            _actions.Execute(
-                decision,
-                _perception.Target,
+                _actions.IsAttackInProgress,
+                _actions.IsHitReacting,
+                _isDead,
+                HasPatrolRoute,
+                _attackMode);
+            _actions.SetTarget(_perception.Target);
+            _behaviorModel.Tick(
                 Time.time,
                 AttackCooldown,
                 Time.deltaTime);
+
+            if (_isDead)
+            {
+                UpdateDeathPresentation();
+            }
         }
 
         /// <summary>
@@ -156,14 +142,16 @@ namespace Odyssey.Characters.Enemies
             _actions.ConfigureAttack(
                 _attackMode,
                 _attackWindup,
+                BeginMeleeAttackSequence,
+                AttackBegin,
                 LaunchProjectile,
                 SetAttackTelegraph);
             _appliedConfig = config;
         }
 
         /// <summary>
-        /// 通过共享 Health 提交伤害，再以结果事件打断常规 Utility 行为。
-        /// 受击与死亡拥有高于目标选择的优先级，避免低生命撤退等常规决策覆盖受击表现。
+        /// 通过共享 Health 提交伤害，再由黑板事实让受击或死亡分支抢占常规行为。
+        /// 受击与死亡拥有最高优先级，避免巡逻、追击或攻击覆盖必须完整播放的反馈。
         /// </summary>
         public DamageResult Apply(DamageRequest request)
         {
@@ -190,50 +178,6 @@ namespace Odyssey.Characters.Enemies
         }
 
         /// <summary>
-        /// 由场景遭遇控制器切换怪物是否参与战斗；等待阶段只执行场景巡逻，激活后才感知并攻击玩家。
-        /// 该入口只表达场景生命周期，不把遭遇状态塞入全局 Manager，也不关闭 NavMeshAgent。
-        /// </summary>
-        public void SetEncounterActive(bool active)
-        {
-            EnsureRuntimeDependencies();
-            _encounterActive = active;
-            if (_agent == null || _isDead)
-            {
-                return;
-            }
-
-            if (!_agent.enabled)
-            {
-                var queryFilter = new NavMeshQueryFilter
-                {
-                    agentTypeID = _agent.agentTypeID,
-                    areaMask = _agent.areaMask
-                };
-                if (!NavMesh.SamplePosition(transform.position, out var hit, 8f, queryFilter))
-                {
-                    _encounterActive = false;
-                    Debug.LogWarning("怪物附近没有可用 NavMesh，本次遭遇不会激活该怪物。", this);
-                    return;
-                }
-
-                transform.position = hit.position;
-                _agent.enabled = true;
-                if (!_agent.isOnNavMesh)
-                {
-                    _agent.enabled = false;
-                    _encounterActive = false;
-                    Debug.LogError("怪物启用 NavMeshAgent 后仍未绑定到对应类型的网格。", this);
-                    return;
-                }
-            }
-
-            if (_agent.enabled && _agent.isOnNavMesh)
-            {
-                _agent.isStopped = false;
-            }
-        }
-
-        /// <summary>
         /// 保留现有玩家攻击入口，并把旧参数适配为统一 DamageRequest。
         /// </summary>
         public void TakeDamage(int damage)
@@ -242,14 +186,17 @@ namespace Odyssey.Characters.Enemies
         }
 
         /// <summary>
-        /// 由攻击动画命中帧调用；低频动画事件继续使用简单查询，不为了 Demo 强行引入全局 NonAlloc 或对象池体系。
+        /// 由代码前摇或兼容的攻击动画事件调用；每次攻击序列只允许提交一次近战伤害。
+        /// 查询保持局部简单实现，不为了六只怪物的低频攻击引入全局对象池或通用战斗管理器。
         /// </summary>
         public void AttackBegin()
         {
-            if (_isDead || _attackMode != EnemyAttackMode.Melee)
+            if (_isDead || _attackMode != EnemyAttackMode.Melee || _meleeDamageCommitted)
             {
                 return;
             }
+
+            _meleeDamageCommitted = true;
 
             var attackCenter = transform.position + Vector3.up + transform.forward * 0.5f;
             foreach (var hit in Physics.OverlapSphere(attackCenter, AttackRange))
@@ -292,16 +239,59 @@ namespace Odyssey.Characters.Enemies
             _animator ??= GetComponent<Animator>();
             _agent ??= GetComponent<NavMeshAgent>();
             _blackboard ??= new EnemyBlackboard();
-            _decisionModel ??= new EnemyDecisionModel();
             _perception ??= new EnemyPerception(transform);
             _patrolRoute ??= GetComponent<EnemyPatrolRoute>();
             _actions ??= new EnemyActionRuntime(transform, _animator, _agent);
+            _behaviorModel ??= new EnemyBehaviorModel(_blackboard, _actions);
             _actions.ConfigurePatrol(_patrolRoute);
             _actions.ConfigureAttack(
                 _attackMode,
                 _attackWindup,
+                BeginMeleeAttackSequence,
+                AttackBegin,
                 LaunchProjectile,
                 SetAttackTelegraph);
+        }
+
+        /// <summary>
+        /// 在场景开始后把禁用的 NavMeshAgent 放到正确类型的网格上再启用。
+        /// 该过程属于角色自身初始化，与战区是否开始无关，保证怪物从游戏启动起就能自主巡逻和感知玩家。
+        /// </summary>
+        private void EnsureNavigationReady()
+        {
+            if (_agent == null || _isDead || (_agent.enabled && _agent.isOnNavMesh))
+            {
+                return;
+            }
+
+            var filter = new NavMeshQueryFilter
+            {
+                agentTypeID = _agent.agentTypeID,
+                areaMask = _agent.areaMask
+            };
+            if (!NavMesh.SamplePosition(transform.position, out var hit, 8f, filter))
+            {
+                Debug.LogError("怪物附近没有对应类型的 NavMesh，无法开始巡逻。", this);
+                return;
+            }
+
+            if (_agent.enabled)
+            {
+                _agent.enabled = false;
+            }
+
+            transform.position = hit.position;
+            _agent.enabled = true;
+            if (!_agent.isOnNavMesh)
+            {
+                _agent.enabled = false;
+                Debug.LogError("怪物启用 NavMeshAgent 后仍未绑定到对应类型的网格。", this);
+            }
+        }
+
+        private void BeginMeleeAttackSequence()
+        {
+            _meleeDamageCommitted = false;
         }
 
         private void Die()

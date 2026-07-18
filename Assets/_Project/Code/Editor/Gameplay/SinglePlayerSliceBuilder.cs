@@ -36,7 +36,6 @@ namespace Odyssey.Editor.Gameplay
         private const string SpitterPrefabPath = GeneratedFolder + "/Spitter.prefab";
         private const string SpitterControllerPath = "Assets/_Project/Content/Animations/Enemies/SpitterAnimator.controller";
         private const string TelegraphMaterialPath = GeneratedFolder + "/SpitterTelegraph.mat";
-        private const string DoorMaterialPath = GeneratedFolder + "/EncounterDoor.mat";
 
         /// <summary>
         /// 依次创建可复用内容资产并装配 Level_01；全部引用设置完成后才保存场景，避免留下半成品状态。
@@ -53,7 +52,7 @@ namespace Odyssey.Editor.Gameplay
             ConfigureScene(spitterPrefab);
             AssetDatabase.SaveAssets();
             AssetDatabase.Refresh();
-            Debug.Log("单机玩法切片搭建完成：两组独立战区、六只怪物、巡逻路线、HUD、蓝色出口和命中反馈已配置。");
+            Debug.Log("单机玩法切片搭建完成：两组战区、六只自主行为树怪物、宽范围巡逻网络、清怪踏板门禁、HUD 和命中反馈已配置。");
         }
 
         private static AnimatorController BuildCleanSpitterController()
@@ -382,8 +381,8 @@ namespace Odyssey.Editor.Gameplay
         }
 
         /// <summary>
-        /// 创建一组独立的触发器、两只近战怪、一只远程怪、巡逻路线、HUD 和蓝色出口。
-        /// 每组只通过实例事件协作，完成第一组不会错误开启第二组的门。
+        /// 创建一组两只近战怪、一只远程怪、共享巡逻网络、HUD 和反馈。
+        /// 怪物从场景启动起自主感知，遭遇控制器只统计死亡结果，不再承担 AI 激活职责。
         /// </summary>
         private static void BuildEncounterGroup(
             Transform container,
@@ -423,75 +422,50 @@ namespace Odyssey.Editor.Gameplay
             participants.GetArrayElementAtIndex(2).objectReferenceValue = spitter;
             serializedEncounter.ApplyModifiedPropertiesWithoutUndo();
 
-            BuildEncounterTrigger(
+            BuildSharedPatrolNetwork(
                 groupRoot.transform,
-                encounter,
+                new[] { chompers[0], chompers[1], spitter },
                 arenaCenter,
-                player.transform.position,
-                includePlayerSpawn: groupIndex == 0);
-            BuildPatrolRoute(groupRoot.transform, chompers[0], awayFromPlayer, 0);
-            BuildPatrolRoute(groupRoot.transform, chompers[1], awayFromPlayer, 1);
-            BuildPatrolRoute(groupRoot.transform, spitter, awayFromPlayer, 2);
-            BuildDoor(groupRoot.transform, encounter, arenaCenter, awayFromPlayer);
+                awayFromPlayer);
+            if (groupIndex == 0)
+            {
+                ConfigureExistingClearanceGate(encounter, arenaCenter);
+            }
+
             BuildHud(groupRoot.transform, encounter, groupIndex);
             BuildFeedback(groupRoot.transform, encounter, player);
         }
 
-        private static void BuildEncounterTrigger(
-            Transform parent,
-            CombatEncounterController encounter,
-            Vector3 arenaCenter,
-            Vector3 playerPosition,
-            bool includePlayerSpawn)
-        {
-            var triggerObject = new GameObject("玩家进入触发区");
-            triggerObject.transform.SetParent(parent, true);
-            var planarCenter = includePlayerSpawn
-                ? (arenaCenter + playerPosition) * 0.5f
-                : arenaCenter;
-            triggerObject.transform.position = planarCenter + Vector3.up * 1.5f;
-            var trigger = triggerObject.AddComponent<BoxCollider>();
-            trigger.isTrigger = true;
-            trigger.size = includePlayerSpawn
-                ? new Vector3(
-                    Mathf.Abs(arenaCenter.x - playerPosition.x) + 6f,
-                    4f,
-                    Mathf.Abs(arenaCenter.z - playerPosition.z) + 6f)
-                : new Vector3(16f, 4f, 16f);
-            var body = triggerObject.AddComponent<Rigidbody>();
-            body.isKinematic = true;
-            body.useGravity = false;
-            var adapter = triggerObject.AddComponent<CombatEncounterTrigger>();
-            var serializedTrigger = new SerializedObject(adapter);
-            serializedTrigger.FindProperty("encounter").objectReferenceValue = encounter;
-            serializedTrigger.ApplyModifiedPropertiesWithoutUndo();
-        }
-
         /// <summary>
-        /// 为一只怪物创建三个可视化巡逻点并写入 EnemyPatrolRoute；所有点都按该 Agent 类型采样到 NavMesh。
+        /// 为同一战区生成六个共享 NavMesh 巡逻点，并让三只怪物从不同索引开始巡逻。
+        /// 共享网络覆盖主要战斗空间，同时避免为每只怪物复制一套近距离小三角路线。
         /// </summary>
-        private static void BuildPatrolRoute(
+        private static void BuildSharedPatrolNetwork(
             Transform parent,
-            Enemy enemy,
-            Vector3 groupForward,
-            int participantIndex)
+            IReadOnlyList<Enemy> enemies,
+            Vector3 arenaCenter,
+            Vector3 groupForward)
         {
-            var routeRoot = new GameObject($"巡逻路线_{enemy.name}");
+            var routeRoot = new GameObject("共享宽范围巡逻网络");
             routeRoot.transform.SetParent(parent, true);
             routeRoot.transform.position = Vector3.zero;
             var side = Vector3.Cross(Vector3.up, groupForward).normalized;
-            var directionSign = participantIndex % 2 == 0 ? 1f : -1f;
+            const float radius = 8f;
             var desiredPositions = new[]
             {
-                enemy.transform.position,
-                enemy.transform.position + side * (2.5f * directionSign),
-                enemy.transform.position + groupForward * 2f - side * (1.8f * directionSign)
+                arenaCenter + groupForward * radius,
+                arenaCenter + groupForward * 4f + side * 7f,
+                arenaCenter - groupForward * 4f + side * 7f,
+                arenaCenter - groupForward * radius,
+                arenaCenter - groupForward * 4f - side * 7f,
+                arenaCenter + groupForward * 4f - side * 7f
             };
             var points = new Transform[desiredPositions.Length];
-            var agent = enemy.GetComponent<NavMeshAgent>();
+            var agent = enemies.Select(enemy => enemy == null ? null : enemy.GetComponent<NavMeshAgent>())
+                .FirstOrDefault(candidate => candidate != null);
             if (agent == null)
             {
-                throw new InvalidOperationException($"怪物“{enemy.name}”缺少 NavMeshAgent，无法创建巡逻路线。");
+                throw new InvalidOperationException("战区怪物缺少 NavMeshAgent，无法创建共享巡逻网络。");
             }
 
             var queryFilter = new NavMeshQueryFilter
@@ -501,34 +475,54 @@ namespace Odyssey.Editor.Gameplay
             };
             for (var pointIndex = 0; pointIndex < desiredPositions.Length; pointIndex++)
             {
-                if (!NavMesh.SamplePosition(desiredPositions[pointIndex], out var hit, 4f, queryFilter))
+                if (!NavMesh.SamplePosition(desiredPositions[pointIndex], out var hit, 6f, queryFilter))
                 {
-                    throw new InvalidOperationException($"无法为怪物“{enemy.name}”的巡逻点 {pointIndex + 1} 找到 NavMesh。");
+                    throw new InvalidOperationException($"无法为战区共享巡逻点 {pointIndex + 1} 找到 NavMesh。");
                 }
 
-                var pointObject = new GameObject($"巡逻点_{pointIndex + 1}");
+                if (points.Take(pointIndex).Any(point => Vector3.Distance(point.position, hit.position) < 2f))
+                {
+                    throw new InvalidOperationException($"共享巡逻点 {pointIndex + 1} 与已有点过近，请检查战区 NavMesh 覆盖。");
+                }
+
+                var pointObject = new GameObject($"共享巡逻点_{pointIndex + 1}");
                 pointObject.transform.SetParent(routeRoot.transform, true);
                 pointObject.transform.position = hit.position;
                 points[pointIndex] = pointObject.transform;
             }
 
-            var route = enemy.GetComponent<EnemyPatrolRoute>();
-            if (route == null)
+            var maximumDistance = points
+                .SelectMany((first, index) => points.Skip(index + 1).Select(second => Vector3.Distance(first.position, second.position)))
+                .DefaultIfEmpty(0f)
+                .Max();
+            if (maximumDistance < 12f)
             {
-                route = enemy.gameObject.AddComponent<EnemyPatrolRoute>();
+                throw new InvalidOperationException(
+                    $"共享巡逻网络跨度只有 {maximumDistance:F1} 米，未达到 12 米的战区覆盖要求。");
             }
 
-            var serializedRoute = new SerializedObject(route);
-            var patrolPoints = serializedRoute.FindProperty("patrolPoints");
-            patrolPoints.arraySize = points.Length;
-            for (var index = 0; index < points.Length; index++)
+            for (var enemyIndex = 0; enemyIndex < enemies.Count; enemyIndex++)
             {
-                patrolPoints.GetArrayElementAtIndex(index).objectReferenceValue = points[index];
-            }
+                var enemy = enemies[enemyIndex];
+                var route = enemy.GetComponent<EnemyPatrolRoute>();
+                if (route == null)
+                {
+                    route = enemy.gameObject.AddComponent<EnemyPatrolRoute>();
+                }
 
-            serializedRoute.FindProperty("waitDuration").floatValue = 0.65f + participantIndex * 0.15f;
-            serializedRoute.ApplyModifiedPropertiesWithoutUndo();
-            EditorUtility.SetDirty(route);
+                var serializedRoute = new SerializedObject(route);
+                var patrolPoints = serializedRoute.FindProperty("patrolPoints");
+                patrolPoints.arraySize = points.Length;
+                for (var pointIndex = 0; pointIndex < points.Length; pointIndex++)
+                {
+                    patrolPoints.GetArrayElementAtIndex(pointIndex).objectReferenceValue = points[pointIndex];
+                }
+
+                serializedRoute.FindProperty("initialPointIndex").intValue = enemyIndex * 2;
+                serializedRoute.FindProperty("waitDuration").floatValue = 0.55f + enemyIndex * 0.15f;
+                serializedRoute.ApplyModifiedPropertiesWithoutUndo();
+                EditorUtility.SetDirty(route);
+            }
         }
 
         /// <summary>
@@ -577,32 +571,94 @@ namespace Odyssey.Editor.Gameplay
             throw new InvalidOperationException("NavMesh 设置中缺少高度约 1 米的小型怪物 Agent 类型。");
         }
 
-        private static void BuildDoor(
-            Transform parent,
+        /// <summary>
+        /// 接管第一战区附近的 3D Game Kit Lite PressurePad 与 DoorHuge，禁用原教学命令脚本并装配项目自有双条件门禁。
+        /// 通过类型全名识别第三方组件，避免 Odyssey.Unity 程序集反向依赖 Assembly-CSharp。
+        /// </summary>
+        private static void ConfigureExistingClearanceGate(
             CombatEncounterController encounter,
-            Vector3 arenaCenter,
-            Vector3 forward)
+            Vector3 arenaCenter)
         {
-            var door = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            door.name = "蓝色战斗出口_击败本组敌人后开启";
-            door.transform.SetParent(parent, true);
-            door.transform.position = arenaCenter + forward * 7f + Vector3.up * 2f;
-            door.transform.rotation = Quaternion.LookRotation(forward);
-            door.transform.localScale = new Vector3(5f, 4f, 0.6f);
-            door.GetComponent<Renderer>().sharedMaterial = GetOrCreateMaterial(
-                DoorMaterialPath,
-                new Color(0.05f, 0.55f, 0.8f, 1f),
-                emission: true);
+            var sceneTransforms = Object.FindObjectsByType<Transform>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+            var padRoot = sceneTransforms
+                .Where(transform => transform.name.IndexOf("PressurePad", StringComparison.OrdinalIgnoreCase) >= 0)
+                .OrderBy(transform => Vector3.Distance(transform.position, arenaCenter))
+                .FirstOrDefault();
+            var doorRoot = sceneTransforms
+                .Where(transform => string.Equals(transform.name, "DoorHuge", StringComparison.OrdinalIgnoreCase))
+                .OrderBy(transform => Vector3.Distance(transform.position, arenaCenter))
+                .FirstOrDefault();
+            if (padRoot == null || doorRoot == null)
+            {
+                throw new InvalidOperationException("第一战区附近未找到原关卡 PressurePad 或 DoorHuge，无法配置清怪门禁。");
+            }
 
-            var audioSource = door.AddComponent<AudioSource>();
+            DisableThirdPartyBehaviours(padRoot.gameObject,
+                "Gamekit3D.GameCommands.SendOnTriggerEnter",
+                "Gamekit3D.InteractOnTrigger");
+            DisableThirdPartyBehaviours(doorRoot.gameObject,
+                "Gamekit3D.GameCommands.SimpleTranslator",
+                "Gamekit3D.GameCommands.GameCommandReceiver");
+
+            var movingBody = doorRoot.GetComponentsInChildren<Rigidbody>(true)
+                .OrderByDescending(body => Mathf.Abs(body.transform.localPosition.y))
+                .FirstOrDefault();
+            if (movingBody == null)
+            {
+                throw new InvalidOperationException("DoorHuge 缺少可移动 Rigidbody 门板。");
+            }
+
+            var audioSource = doorRoot.GetComponent<AudioSource>();
+            if (audioSource == null)
+            {
+                audioSource = doorRoot.gameObject.AddComponent<AudioSource>();
+            }
+
             audioSource.playOnAwake = false;
             audioSource.spatialBlend = 1f;
             audioSource.clip = AssetDatabase.LoadAssetAtPath<AudioClip>(DoorAudioPath);
-            var doorView = door.AddComponent<CombatEncounterDoor>();
-            var serializedDoor = new SerializedObject(doorView);
-            serializedDoor.FindProperty("encounter").objectReferenceValue = encounter;
-            serializedDoor.FindProperty("audioSource").objectReferenceValue = audioSource;
-            serializedDoor.ApplyModifiedPropertiesWithoutUndo();
+            var gate = doorRoot.GetComponent<EncounterClearanceGate>();
+            if (gate == null)
+            {
+                gate = doorRoot.gameObject.AddComponent<EncounterClearanceGate>();
+            }
+            var serializedGate = new SerializedObject(gate);
+            serializedGate.FindProperty("movingPart").objectReferenceValue = movingBody.transform;
+            serializedGate.FindProperty("openLocalOffset").vector3Value = Vector3.down * 10.1f;
+            serializedGate.FindProperty("audioSource").objectReferenceValue = audioSource;
+            serializedGate.ApplyModifiedPropertiesWithoutUndo();
+
+            var triggerCollider = padRoot.GetComponentsInChildren<Collider>(true)
+                .FirstOrDefault(collider => collider.isTrigger) ??
+                padRoot.GetComponentsInChildren<Collider>(true).FirstOrDefault();
+            if (triggerCollider == null)
+            {
+                throw new InvalidOperationException("PressurePad 缺少用于检测玩家的 Collider。");
+            }
+
+            triggerCollider.isTrigger = true;
+            var pressurePlate = triggerCollider.GetComponent<EncounterClearancePressurePlate>();
+            if (pressurePlate == null)
+            {
+                pressurePlate = triggerCollider.gameObject.AddComponent<EncounterClearancePressurePlate>();
+            }
+            var serializedPlate = new SerializedObject(pressurePlate);
+            serializedPlate.FindProperty("encounter").objectReferenceValue = encounter;
+            serializedPlate.FindProperty("gate").objectReferenceValue = gate;
+            serializedPlate.ApplyModifiedPropertiesWithoutUndo();
+        }
+
+        private static void DisableThirdPartyBehaviours(GameObject root, params string[] typeNames)
+        {
+            var names = new HashSet<string>(typeNames, StringComparer.Ordinal);
+            foreach (var behaviour in root.GetComponentsInChildren<MonoBehaviour>(true))
+            {
+                if (behaviour != null && names.Contains(behaviour.GetType().FullName))
+                {
+                    behaviour.enabled = false;
+                    EditorUtility.SetDirty(behaviour);
+                }
+            }
         }
 
         private static void BuildHud(Transform parent, CombatEncounterController encounter, int displayIndex)
@@ -629,7 +685,7 @@ namespace Odyssey.Editor.Gameplay
             text.fontSize = 30;
             text.alignment = TextAnchor.MiddleCenter;
             text.color = Color.white;
-            text.text = $"{encounter.DisplayName}：进入区域，击败敌人后蓝色出口开启";
+            text.text = $"{encounter.DisplayName}：清理全部敌人";
 
             var view = canvasObject.AddComponent<CombatEncounterView>();
             var serializedView = new SerializedObject(view);

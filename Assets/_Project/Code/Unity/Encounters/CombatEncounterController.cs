@@ -7,14 +7,13 @@ using UnityEngine;
 namespace Odyssey.Encounters
 {
     /// <summary>
-    /// 把预先放置的场景敌人装配为一次可开始、可统计、可完成的战斗遭遇，并发布只读结果事件。
-    /// 采用场景级 Controller 与观察者模式；它不是单例，不生成波次，也不直接控制 UI、门或音效。
+    /// 统计一组预先放置敌人的存活进度并发布开始、击败和完成事件。
+    /// 采用场景级 Controller 与观察者模式；它不是单例，也不控制怪物 AI、UI、门或音效。
     /// </summary>
     public sealed class CombatEncounterController : MonoBehaviour
     {
         [SerializeField] private string displayName = "战斗区域";
         [SerializeField] private Enemy[] participants = Array.Empty<Enemy>();
-        [SerializeField] private bool startOnSceneLoad;
 
         private readonly HashSet<Enemy> _defeated = new HashSet<Enemy>();
         private CombatEncounterProgress _progress;
@@ -51,13 +50,13 @@ namespace Odyssey.Encounters
             foreach (var enemy in participants)
             {
                 enemy.Defeated += HandleEnemyDefeated;
-                enemy.SetEncounterActive(startOnSceneLoad);
             }
+        }
 
-            if (startOnSceneLoad)
-            {
-                StartEncounter();
-            }
+        private void Start()
+        {
+            // 战区只承担统计职责，因此场景开始后立即进入 Active；怪物 AI 始终独立运行。
+            StartEncounter();
         }
 
         private void OnDestroy()
@@ -72,21 +71,13 @@ namespace Odyssey.Encounters
         }
 
         /// <summary>
-        /// 原子地激活规则状态和所有参与者；重复触发安全返回，避免多个玩家或复合碰撞体重复发布开始事件。
+        /// 原子地启动统计状态；重复调用安全返回，且绝不改变参与怪物的行为树状态。
         /// </summary>
         public bool StartEncounter()
         {
             if (_progress == null || !_progress.Start())
             {
                 return false;
-            }
-
-            foreach (var enemy in participants)
-            {
-                if (enemy != null)
-                {
-                    enemy.SetEncounterActive(true);
-                }
             }
 
             EncounterStarted?.Invoke();

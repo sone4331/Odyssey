@@ -23,7 +23,7 @@ namespace Odyssey.Encounters
             encounter.EncounterStarted += ShowStarted;
             encounter.EnemyDefeated += ShowProgress;
             encounter.EncounterCompleted += ShowCompleted;
-            SetText($"{encounter.DisplayName}：进入区域，击败敌人后蓝色出口开启");
+            SetText($"{encounter.DisplayName}：清理全部敌人");
         }
 
         private void OnDisable()
@@ -50,7 +50,9 @@ namespace Odyssey.Encounters
 
         private void ShowCompleted()
         {
-            SetText($"{encounter.DisplayName}完成　蓝色出口已开启");
+            SetText(encounter.DisplayName == "第一战区"
+                ? "第一战区完成　重新踩下踏板开启隔离门"
+                : $"{encounter.DisplayName}完成");
         }
 
         private void SetText(string value)

@@ -1,30 +1,38 @@
+using System;
 using Odyssey.Gameplay.AI;
+using Odyssey.Gameplay.Config;
 using UnityEngine;
 using UnityEngine.AI;
-using Odyssey.Gameplay.Config;
-using System;
 
 namespace Odyssey.Characters.Enemies
 {
     /// <summary>
-    /// 把 Utility 目标翻译为 NavMesh、朝向和 Animator 操作，并维护攻击冷却与受击锁定。
-    /// 采用 Action 执行层隔离决策和表现；只实现当前 Demo 需要的 Idle、Chase、Attack、Retreat，不构建通用行为树节点框架。
+    /// 将行为树的 Patrol、Chase、Attack、Retreat 等意图翻译为 NavMesh、朝向、Animator 和伤害时序。
+    /// 采用端口适配器与 Strategy 模式：本类只回答“如何执行”，不判断“何时选择”，从而避免决策和表现再次耦合。
     /// </summary>
-    internal sealed class EnemyActionRuntime
+    internal sealed class EnemyActionRuntime : IEnemyBehaviorActions
     {
+        private const float ChaseRefreshInterval = 0.15f;
+        private const float RetreatRefreshInterval = 0.25f;
+
         private readonly Transform _owner;
         private readonly Animator _animator;
         private readonly NavMeshAgent _agent;
         private readonly float _combatMoveSpeed;
         private EnemyPatrolRoute _patrolRoute;
+        private Transform _target;
         private string _currentAnimation = string.Empty;
         private float _lastAttackTime = float.NegativeInfinity;
-        private float _lockRemaining;
+        private float _hitLockRemaining;
+        private float _attackLockRemaining;
+        private float _chaseRefreshRemaining;
         private float _retreatRefreshRemaining;
         private EnemyAttackMode _attackMode;
         private float _attackWindup;
-        private float _pendingShotRemaining;
+        private float _pendingAttackRemaining = -1f;
         private Vector3 _pendingTargetPosition;
+        private Action _beginMeleeAttack;
+        private Action _applyMeleeDamage;
         private Action<Vector3> _launchProjectile;
         private Action<bool> _setTelegraph;
 
@@ -36,83 +44,108 @@ namespace Odyssey.Characters.Enemies
             _combatMoveSpeed = agent == null ? 0f : agent.speed;
         }
 
+        public bool IsHitReacting => _hitLockRemaining > 0f;
+        public bool IsAttackInProgress => _attackLockRemaining > 0f;
+
         public bool CanAttack(float currentTime, float cooldown)
         {
-            return _lockRemaining <= 0f && currentTime >= _lastAttackTime + cooldown;
+            return !IsHitReacting && !IsAttackInProgress && currentTime >= _lastAttackTime + cooldown;
         }
 
+        public void SetTarget(Transform target) => _target = target;
+
         /// <summary>
-        /// 注入场景配置的巡逻路线；动作层不创建点位，也不持有遭遇控制器，从而保持场景配置与执行逻辑解耦。
+        /// 推进受击锁、攻击锁和前摇命中计时。时序独立于当前树分支，保证一次已开始的攻击不会因动画状态更新而丢失命中帧。
         /// </summary>
-        public void ConfigurePatrol(EnemyPatrolRoute patrolRoute)
+        public void TickTimers(float deltaTime)
         {
-            _patrolRoute = patrolRoute;
+            _hitLockRemaining = Mathf.Max(0f, _hitLockRemaining - deltaTime);
+            _attackLockRemaining = Mathf.Max(0f, _attackLockRemaining - deltaTime);
+            TickPendingAttack(deltaTime);
         }
 
         /// <summary>
-        /// 注入当前配置选择的攻击执行方式；远程攻击通过委托回到 Enemy 创建场景对象，动作层只维护前摇时序。
-        /// 这是一种轻量 Strategy 边界，避免为仅有两种攻击方式建立通用技能节点框架。
+        /// 注入场景配置的巡逻路线；动作层不创建点位，也不持有战区控制器。
+        /// </summary>
+        public void ConfigurePatrol(EnemyPatrolRoute patrolRoute) => _patrolRoute = patrolRoute;
+
+        /// <summary>
+        /// 注入近战或投射物攻击策略。权威命中由代码前摇触发，Animator 只负责表现，不依赖第三方动画事件。
         /// </summary>
         public void ConfigureAttack(
             EnemyAttackMode attackMode,
             float attackWindup,
+            Action beginMeleeAttack,
+            Action applyMeleeDamage,
             Action<Vector3> launchProjectile,
             Action<bool> setTelegraph)
         {
             _attackMode = attackMode;
             _attackWindup = Mathf.Max(0f, attackWindup);
+            _beginMeleeAttack = beginMeleeAttack;
+            _applyMeleeDamage = applyMeleeDamage;
             _launchProjectile = launchProjectile;
             _setTelegraph = setTelegraph;
-            _pendingShotRemaining = -1f;
+            CancelPendingAttack();
         }
 
-        /// <summary>
-        /// 推进受击或攻击动作锁；锁定期间停止导航并跳过 Utility 决策，保证动画不会被每帧目标选择覆盖。
-        /// </summary>
-        public bool TickLock(float deltaTime)
+        public BehaviorStatus Tick(EnemyGoal goal, float currentTime, float attackCooldown, float deltaTime)
         {
-            if (_lockRemaining <= 0f)
-            {
-                return false;
-            }
-
-            _lockRemaining -= deltaTime;
-            TickPendingProjectile(deltaTime);
-            StopNavigation();
-            return true;
-        }
-
-        public void Execute(
-            EnemyDecision decision,
-            Transform target,
-            float currentTime,
-            float attackCooldown,
-            float deltaTime)
-        {
-            switch (decision.Goal)
+            switch (goal)
             {
                 case EnemyGoal.Patrol:
                     Patrol(deltaTime);
                     break;
                 case EnemyGoal.Chase:
-                    Chase(target);
+                    Chase(deltaTime);
                     break;
                 case EnemyGoal.Attack:
-                    Attack(target, currentTime, attackCooldown);
-                    break;
+                    return Attack(currentTime, attackCooldown);
                 case EnemyGoal.Retreat:
-                    Retreat(target, deltaTime);
+                    Retreat(deltaTime);
+                    break;
+                case EnemyGoal.Hit:
+                    StopNavigation();
+                    break;
+                case EnemyGoal.Dead:
+                    DisableNavigation();
                     break;
                 default:
-                    Idle();
+                    Idle(deltaTime);
                     break;
             }
+
+            return BehaviorStatus.Running;
+        }
+
+        /// <summary>
+        /// 清理被行为树抢占的动作副作用。尤其要取消尚未结算的攻击前摇，防止目标已经丢失后仍在原地造成伤害。
+        /// </summary>
+        public void Abort(EnemyGoal goal)
+        {
+            if (goal == EnemyGoal.Attack)
+            {
+                _attackLockRemaining = 0f;
+                CancelPendingAttack();
+            }
+
+            if (goal == EnemyGoal.Chase)
+            {
+                _chaseRefreshRemaining = 0f;
+            }
+            else if (goal == EnemyGoal.Retreat)
+            {
+                _retreatRefreshRemaining = 0f;
+            }
+
+            StopNavigation();
         }
 
         public void NotifyHit()
         {
-            CancelPendingProjectile();
-            _lockRemaining = 0.5f;
+            _attackLockRemaining = 0f;
+            CancelPendingAttack();
+            _hitLockRemaining = 0.5f;
             StopNavigation();
             PlayAnimation(_attackMode == EnemyAttackMode.Projectile
                 ? "TopHit"
@@ -121,66 +154,80 @@ namespace Odyssey.Characters.Enemies
 
         public void DisableNavigation()
         {
-            CancelPendingProjectile();
-            if (_agent != null)
+            CancelPendingAttack();
+            if (_agent != null && _agent.enabled)
             {
                 _agent.enabled = false;
             }
         }
 
-        private void Idle()
+        private void Idle(float deltaTime)
         {
             StopNavigation();
+            FaceTarget(deltaTime);
             PlayAnimation("Idle", 0.12f);
         }
 
-        private void Chase(Transform target)
+        /// <summary>
+        /// 追击目的地按固定低频刷新，而 NavMeshAgent 自身仍逐帧移动；这样既能跟随玩家，也避免每帧重复寻路。
+        /// </summary>
+        private void Chase(float deltaTime)
         {
-            if (!CanNavigate() || target == null)
+            if (!CanNavigate() || _target == null)
             {
-                Idle();
+                Idle(deltaTime);
                 return;
             }
 
             RestoreCombatSpeed();
-            _agent.isStopped = false;
-            _agent.SetDestination(target.position);
+            _chaseRefreshRemaining -= deltaTime;
+            if (_chaseRefreshRemaining <= 0f)
+            {
+                _chaseRefreshRemaining = ChaseRefreshInterval;
+                _agent.isStopped = false;
+                _agent.SetDestination(_target.position);
+            }
+
             PlayAnimation(_attackMode == EnemyAttackMode.Projectile ? "Fleeing" : "Run", 0.12f);
         }
 
-        private void Attack(Transform target, float currentTime, float cooldown)
+        private BehaviorStatus Attack(float currentTime, float cooldown)
         {
             StopNavigation();
-            if (!CanAttack(currentTime, cooldown) || target == null)
+            if (IsAttackInProgress)
             {
-                PlayAnimation("Idle", 0.1f);
-                return;
+                FaceTarget(0.02f);
+                return BehaviorStatus.Running;
             }
 
-            var direction = target.position - _owner.position;
-            direction.y = 0f;
-            if (direction != Vector3.zero)
+            if (!CanAttack(currentTime, cooldown) || _target == null)
             {
-                _owner.rotation = Quaternion.LookRotation(direction.normalized);
+                return BehaviorStatus.Failure;
             }
 
+            FaceTarget(1f);
             _lastAttackTime = currentTime;
-            _lockRemaining = Mathf.Max(1.2f, _attackWindup + 0.35f);
+            _attackLockRemaining = Mathf.Max(1.2f, _attackWindup + 0.35f);
+            _pendingAttackRemaining = _attackWindup;
             if (_attackMode == EnemyAttackMode.Projectile)
             {
-                _pendingTargetPosition = target.position + Vector3.up * 0.75f;
-                _pendingShotRemaining = _attackWindup;
+                _pendingTargetPosition = _target.position + Vector3.up * 0.75f;
                 _setTelegraph?.Invoke(true);
+            }
+            else
+            {
+                _beginMeleeAttack?.Invoke();
             }
 
             PlayAnimation("Attack", 0.08f);
+            return BehaviorStatus.Running;
         }
 
-        private void Retreat(Transform target, float deltaTime)
+        private void Retreat(float deltaTime)
         {
-            if (!CanNavigate() || target == null)
+            if (!CanNavigate() || _target == null)
             {
-                Idle();
+                Idle(deltaTime);
                 return;
             }
 
@@ -188,16 +235,20 @@ namespace Odyssey.Characters.Enemies
             _retreatRefreshRemaining -= deltaTime;
             if (_retreatRefreshRemaining <= 0f)
             {
-                _retreatRefreshRemaining = 0.25f;
-                var away = _owner.position - target.position;
-                away.y = 0f;
-                if (away == Vector3.zero)
+                _retreatRefreshRemaining = RetreatRefreshInterval;
+                var away = Vector3.ProjectOnPlane(_owner.position - _target.position, Vector3.up);
+                if (away.sqrMagnitude <= 0.001f)
                 {
                     away = -_owner.forward;
                 }
 
                 var desired = _owner.position + away.normalized * 3f;
-                if (NavMesh.SamplePosition(desired, out var hit, 2f, NavMesh.AllAreas))
+                var filter = new NavMeshQueryFilter
+                {
+                    agentTypeID = _agent.agentTypeID,
+                    areaMask = _agent.areaMask
+                };
+                if (NavMesh.SamplePosition(desired, out var hit, 2f, filter))
                 {
                     _agent.isStopped = false;
                     _agent.SetDestination(hit.position);
@@ -211,15 +262,12 @@ namespace Odyssey.Characters.Enemies
             PlayAnimation(_attackMode == EnemyAttackMode.Projectile ? "Fleeing" : "Run", 0.12f);
         }
 
-        /// <summary>
-        /// 以战斗速度的 55% 沿路线移动，到点后短暂停留；巡逻只负责表现和导航，不改变感知或遭遇状态。
-        /// </summary>
         private void Patrol(float deltaTime)
         {
             if (!CanNavigate() || _patrolRoute == null ||
                 !_patrolRoute.Evaluate(_owner.position, deltaTime, out var destination, out var waiting))
             {
-                Idle();
+                Idle(deltaTime);
                 return;
             }
 
@@ -236,10 +284,7 @@ namespace Odyssey.Characters.Enemies
             PlayAnimation(_attackMode == EnemyAttackMode.Projectile ? "Fleeing" : "Run", 0.12f);
         }
 
-        private bool CanNavigate()
-        {
-            return _agent != null && _agent.enabled && _agent.isOnNavMesh;
-        }
+        private bool CanNavigate() => _agent != null && _agent.enabled && _agent.isOnNavMesh;
 
         private void StopNavigation()
         {
@@ -250,6 +295,23 @@ namespace Odyssey.Characters.Enemies
 
             _agent.isStopped = true;
             _agent.velocity = Vector3.zero;
+        }
+
+        private void FaceTarget(float deltaTime)
+        {
+            if (_target == null)
+            {
+                return;
+            }
+
+            var direction = Vector3.ProjectOnPlane(_target.position - _owner.position, Vector3.up);
+            if (direction.sqrMagnitude <= 0.001f)
+            {
+                return;
+            }
+
+            var desired = Quaternion.LookRotation(direction.normalized);
+            _owner.rotation = Quaternion.RotateTowards(_owner.rotation, desired, 540f * Mathf.Max(0.02f, deltaTime));
         }
 
         private void PlayAnimation(string stateName, float transitionDuration)
@@ -272,9 +334,6 @@ namespace Odyssey.Characters.Enemies
             _currentAnimation = resolvedState;
         }
 
-        /// <summary>
-        /// 在播放前验证状态存在；远程怪配置尚未装配时若收到受击，优先回退到 TopHit，避免 Unity 输出 GotoState 警告。
-        /// </summary>
         private string ResolveAnimationState(string requestedState)
         {
             if (HasAnimationState(requestedState))
@@ -303,27 +362,37 @@ namespace Odyssey.Characters.Enemies
             }
         }
 
-        private void TickPendingProjectile(float deltaTime)
+        /// <summary>
+        /// 以配置前摇驱动权威命中时刻；近战和投射物都只提交一次，便于后续 Host 权威网络层复用同一规则。
+        /// </summary>
+        private void TickPendingAttack(float deltaTime)
         {
-            if (_attackMode != EnemyAttackMode.Projectile || _pendingShotRemaining < 0f)
+            if (_pendingAttackRemaining < 0f)
             {
                 return;
             }
 
-            _pendingShotRemaining -= deltaTime;
-            if (_pendingShotRemaining > 0f)
+            _pendingAttackRemaining -= deltaTime;
+            if (_pendingAttackRemaining > 0f)
             {
                 return;
             }
 
-            _pendingShotRemaining = -1f;
-            _setTelegraph?.Invoke(false);
-            _launchProjectile?.Invoke(_pendingTargetPosition);
+            _pendingAttackRemaining = -1f;
+            if (_attackMode == EnemyAttackMode.Projectile)
+            {
+                _setTelegraph?.Invoke(false);
+                _launchProjectile?.Invoke(_pendingTargetPosition);
+            }
+            else
+            {
+                _applyMeleeDamage?.Invoke();
+            }
         }
 
-        private void CancelPendingProjectile()
+        private void CancelPendingAttack()
         {
-            _pendingShotRemaining = -1f;
+            _pendingAttackRemaining = -1f;
             _setTelegraph?.Invoke(false);
         }
     }

@@ -7,11 +7,12 @@ namespace Odyssey.Characters.Enemies
     /// <summary>
     /// 保存单个怪物的有序巡逻点，并维护“到达—等待—前往下一点”的轻量游标。
     /// 采用场景组件与状态游标模式：路线负责点位和进度，EnemyActionRuntime 只负责 NavMesh 移动与动画。
-    /// 这样策划可以直接在 Scene 视图调整路线，同时避免为了少量固定路线引入通用路径编辑器或行为树。
+    /// 这样策划可以直接在 Scene 视图调整路线，同时让多只怪物共享点位但使用不同起点，避免队伍重叠。
     /// </summary>
     public sealed class EnemyPatrolRoute : MonoBehaviour
     {
         [SerializeField] private Transform[] patrolPoints = Array.Empty<Transform>();
+        [SerializeField, Min(0)] private int initialPointIndex;
         [SerializeField, Min(0.05f)] private float arrivalDistance = 0.45f;
         [SerializeField, Min(0f)] private float waitDuration = 0.8f;
 
@@ -23,6 +24,39 @@ namespace Odyssey.Characters.Enemies
         public string CurrentPointName => HasValidRoute && patrolPoints[_currentIndex] != null
             ? patrolPoints[_currentIndex].name
             : "无";
+        public int CurrentPointIndex => _currentIndex;
+        public float MaximumPointDistance
+        {
+            get
+            {
+                var maximum = 0f;
+                if (patrolPoints == null)
+                {
+                    return maximum;
+                }
+
+                for (var first = 0; first < patrolPoints.Length; first++)
+                {
+                    for (var second = first + 1; second < patrolPoints.Length; second++)
+                    {
+                        if (patrolPoints[first] != null && patrolPoints[second] != null)
+                        {
+                            maximum = Mathf.Max(maximum,
+                                Vector3.Distance(patrolPoints[first].position, patrolPoints[second].position));
+                        }
+                    }
+                }
+
+                return maximum;
+            }
+        }
+
+        private void Awake()
+        {
+            _currentIndex = HasValidRoute
+                ? Mathf.Clamp(initialPointIndex, 0, patrolPoints.Length - 1)
+                : 0;
+        }
 
         /// <summary>
         /// 计算本帧巡逻目标；返回 false 表示路线配置无效，waiting 为 true 表示怪物应在点位短暂停留。
@@ -78,6 +112,7 @@ namespace Odyssey.Characters.Enemies
         {
             arrivalDistance = Mathf.Max(0.05f, arrivalDistance);
             waitDuration = Mathf.Max(0f, waitDuration);
+            initialPointIndex = Mathf.Max(0, initialPointIndex);
         }
 
         private void OnDrawGizmosSelected()
