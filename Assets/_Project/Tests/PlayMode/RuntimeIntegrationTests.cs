@@ -294,6 +294,75 @@ namespace Odyssey.Tests.PlayMode
         }
 
         [UnityTest]
+        public IEnumerator PlayerEnvironmentSensor_StompsAtHighSpeedAndDetectsNearbyWall()
+        {
+            var player = Object.FindFirstObjectByType<PlayerController>();
+            Assert.That(player, Is.Not.Null, "场景中未找到玩家");
+            var originalPosition = player.transform.position;
+
+            SetJumpPressed(player, true);
+            yield return new WaitForSeconds(0.05f);
+            SetJumpPressed(player, false);
+            yield return null;
+            Assert.That(player.LocomotionState,
+                Is.EqualTo(Odyssey.Gameplay.Characters.PlayerLocomotionStateId.Airborne),
+                "踩踏测试开始前玩家未进入空中状态");
+
+            var enemyObject = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            enemyObject.name = "高速踩踏测试敌人";
+            enemyObject.layer = FindFirstLayer(player.EnemyLayer);
+            enemyObject.transform.localScale = new Vector3(1f, 0.5f, 1f);
+            enemyObject.transform.position = originalPosition + player.transform.right * 2f + Vector3.up * 0.25f;
+            var enemy = enemyObject.AddComponent<Enemy>();
+            enemy.enabled = false;
+
+            player.Controller.enabled = false;
+            player.transform.position = enemyObject.transform.position + Vector3.up * 0.5f;
+            player.Controller.enabled = true;
+            player.VerticalVelocity = -20f;
+            yield return null;
+
+            Assert.That(enemy.CurrentHealth, Is.EqualTo(2),
+                "动态脚底扫描没有在高速下落时命中敌人顶部");
+            Assert.That(player.VerticalVelocity, Is.GreaterThan(0f),
+                "踩踏伤害被接受后玩家没有向上反弹");
+
+            Object.Destroy(enemyObject);
+            yield return null;
+
+            var moveDirection = Vector3.ProjectOnPlane(player.MainCameraTransform.forward, Vector3.up).normalized;
+            var wall = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            wall.name = "胶囊墙面感知测试墙";
+            wall.layer = FindFirstLayer(player.WallLayer);
+            wall.transform.rotation = Quaternion.LookRotation(moveDirection, Vector3.up);
+            wall.transform.localScale = new Vector3(3f, 3f, 0.1f);
+
+            player.Controller.enabled = false;
+            player.transform.position = originalPosition + Vector3.up * 1.5f;
+            player.Controller.enabled = true;
+            wall.transform.position = player.transform.position +
+                                      moveDirection * (player.Controller.radius + 0.1f) +
+                                      Vector3.up;
+            player.VerticalVelocity = -5f;
+            SetMovementValue(player, Vector2.up);
+            for (var frame = 0;
+                 frame < 10 &&
+                 player.LocomotionState != Odyssey.Gameplay.Characters.PlayerLocomotionStateId.WallSlide;
+                 frame++)
+            {
+                yield return null;
+            }
+
+            Assert.That(player.LocomotionState,
+                Is.EqualTo(Odyssey.Gameplay.Characters.PlayerLocomotionStateId.WallSlide),
+                "胶囊墙面感知没有在玩家下降并朝墙移动时进入 WallSlide");
+
+            SetMovementValue(player, Vector2.zero);
+            Object.Destroy(wall);
+            yield return null;
+        }
+
+        [UnityTest]
         public IEnumerator PlayerAnimator_DrivesJumpApexAndFallWithoutTransitions()
         {
             var player = Object.FindFirstObjectByType<PlayerController>();
@@ -439,6 +508,20 @@ namespace Odyssey.Tests.PlayMode
                 BindingFlags.Instance | BindingFlags.NonPublic);
             Assert.That(method, Is.Not.Null, $"未找到玩家命令入口：{methodName}");
             method.Invoke(player, null);
+        }
+
+        private static int FindFirstLayer(LayerMask mask)
+        {
+            for (var layer = 0; layer < 32; layer++)
+            {
+                if ((mask.value & (1 << layer)) != 0)
+                {
+                    return layer;
+                }
+            }
+
+            Assert.Fail("测试所需的 LayerMask 未配置任何层");
+            return 0;
         }
     }
 }

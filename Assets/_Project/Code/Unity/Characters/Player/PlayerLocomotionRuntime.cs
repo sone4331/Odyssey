@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using Odyssey.Core.FSM;
 using Odyssey.Gameplay.Characters;
-using Odyssey.Characters.Enemies;
+using Odyssey.Gameplay.Combat;
 using Odyssey.Inputs;
 using UnityEngine;
 
@@ -21,6 +21,7 @@ namespace Odyssey.Characters.Player
         private readonly AirborneState _airborneState;
         private readonly WallSlideState _wallSlideState;
         private readonly PlayerWallClearanceSolver _wallClearance;
+        private readonly PlayerEnvironmentSensor _environmentSensor;
         private float _currentPlanarSpeed;
         private Vector3 _desiredMoveDirection;
         private float _groundSlopeAngle;
@@ -33,6 +34,7 @@ namespace Odyssey.Characters.Player
             _airborneState = new AirborneState(this);
             _wallSlideState = new WallSlideState(this);
             _wallClearance = new PlayerWallClearanceSolver(player);
+            _environmentSensor = new PlayerEnvironmentSensor(player);
             _machine = new DeferredStateMachine<PlayerLocomotionStateId>(
                 new Dictionary<PlayerLocomotionStateId, IState<PlayerLocomotionStateId>>
                 {
@@ -226,25 +228,6 @@ namespace Odyssey.Characters.Player
                     QueryTriggerInteraction.Ignore);
             }
 
-            protected bool TryFindWall(out RaycastHit hit)
-            {
-                var start = Player.transform.position + Vector3.up;
-                Debug.DrawRay(start, Player.transform.forward, Color.yellow);
-                return Physics.Raycast(
-                    start,
-                    Player.transform.forward,
-                    out hit,
-                    1f,
-                    Player.WallLayer,
-                    QueryTriggerInteraction.Ignore);
-            }
-
-            protected bool IsWallNormalUsable(Vector3 normal)
-            {
-                var angle = Vector3.Angle(Vector3.up, normal);
-                return angle > 70f && angle < 110f;
-            }
-
             protected StateTransition<PlayerLocomotionStateId> TransitionIfNeeded(
                 PlayerLocomotionObservation observation)
             {
@@ -369,8 +352,9 @@ namespace Odyssey.Characters.Player
 
         private sealed class AirborneState : LocomotionState
         {
-            private static readonly RaycastHit[] StompHits = new RaycastHit[8];
+            private const float WallContactGraceTime = 0.08f;
             private bool _fallAnimationStarted;
+            private float _wallContactGraceRemaining;
 
             public AirborneState(PlayerLocomotionRuntime runtime) : base(runtime)
             {
@@ -379,6 +363,7 @@ namespace Odyssey.Characters.Player
             public override void Enter()
             {
                 _fallAnimationStarted = Player.VerticalVelocity <= 0f;
+                _wallContactGraceRemaining = 0f;
                 if (!Player.MovementEnabled)
                 {
                     return;
@@ -420,7 +405,7 @@ namespace Odyssey.Characters.Player
                     }
                 }
 
-                if (Player.MovementEnabled && Player.VerticalVelocity < 0f && TryStompEnemy())
+                if (Player.MovementEnabled && Player.VerticalVelocity < 0f && TryStompEnemy(deltaTime))
                 {
                     Player.VerticalVelocity = 8f;
                     Player.CanAirJump = true;
@@ -431,10 +416,20 @@ namespace Odyssey.Characters.Player
                 }
 
                 var touchingWall = false;
-                if (Player.VerticalVelocity < 0f && TryFindWall(out var wallHit) && IsWallNormalUsable(wallHit.normal))
+                var wallProbeDirection = input == null
+                    ? Vector3.zero
+                    : ReadCameraDirection(Vector2.ClampMagnitude(input.MovementValue, 1f));
+                if (Player.VerticalVelocity < 0f &&
+                    Runtime._environmentSensor.TryFindWall(wallProbeDirection, out var wallHit))
                 {
                     touchingWall = true;
                     Runtime.WallNormal = wallHit.normal;
+                    _wallContactGraceRemaining = WallContactGraceTime;
+                }
+                else if (Player.VerticalVelocity < 0f && _wallContactGraceRemaining > 0f)
+                {
+                    _wallContactGraceRemaining -= deltaTime;
+                    touchingWall = true;
                 }
 
                 if (Player.MovementEnabled)
@@ -451,43 +446,33 @@ namespace Odyssey.Characters.Player
                 return transition;
             }
 
-            private bool TryStompEnemy()
+            private bool TryStompEnemy(float deltaTime)
             {
-                var origin = Player.transform.position + Vector3.up * 0.1f;
-                var count = Physics.SphereCastNonAlloc(
-                    origin,
-                    0.2f,
-                    Vector3.down,
-                    StompHits,
-                    0.2f,
-                    Player.EnemyLayer,
-                    QueryTriggerInteraction.Ignore);
-                for (var i = 0; i < count; i++)
+                if (!Runtime._environmentSensor.TryFindStompTarget(
+                        Player.VerticalVelocity,
+                        deltaTime,
+                        out var damageable))
                 {
-                    var enemy = StompHits[i].collider == null
-                        ? null
-                        : StompHits[i].collider.GetComponentInParent<Enemy>();
-                    if (enemy == null)
-                    {
-                        continue;
-                    }
-
-                    enemy.TakeDamage(Player.AttackDamage);
-                    return true;
+                    return false;
                 }
 
-                return false;
+                var result = damageable.Apply(new DamageRequest(Player.AttackDamage, "player_stomp"));
+                return result.Accepted;
             }
         }
 
         private sealed class WallSlideState : LocomotionState
         {
+            private const float WallContactGraceTime = 0.08f;
+            private float _wallContactGraceRemaining;
+
             public WallSlideState(PlayerLocomotionRuntime runtime) : base(runtime)
             {
             }
 
             public override void Enter()
             {
+                _wallContactGraceRemaining = WallContactGraceTime;
                 if (Player.MovementEnabled)
                 {
                     Player.Animation.PlayAirborne(Player.VerticalVelocity);
@@ -518,11 +503,18 @@ namespace Odyssey.Characters.Player
                     return StateTransition<PlayerLocomotionStateId>.To(PlayerLocomotionStateId.Airborne);
                 }
 
-                var touchingWall = TryFindWall(out var hit) && IsWallNormalUsable(hit.normal);
-                if (touchingWall)
+                var hasWallHit = Runtime._environmentSensor.TryFindWall(-Runtime.WallNormal, out var hit);
+                if (hasWallHit)
                 {
                     Runtime.WallNormal = hit.normal;
+                    _wallContactGraceRemaining = WallContactGraceTime;
                 }
+                else
+                {
+                    _wallContactGraceRemaining -= deltaTime;
+                }
+
+                var touchingWall = hasWallHit || _wallContactGraceRemaining > 0f;
 
                 Player.VerticalVelocity = Player.WallSlideSpeed;
                 if (Player.MovementEnabled)

@@ -42,7 +42,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\Tools\Tests\RunHumanReadab
 2. 打开 `Window → General → Test Runner`，切换到 `PlayMode` 页签。
 3. 点击 `Run All`。测试会自动进入 Play Mode、装载 `Level_01` 并在结束后退出。
 
-预期结果：12 项通过、0 项失败。分别验证：
+预期结果：13 项通过、0 项失败。分别验证：
 
 - Bootstrap 应用六点生命配置并生成六个生命图标。
 - 暂停门面同时更新面板和 `Time.timeScale`。
@@ -56,6 +56,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\Tools\Tests\RunHumanReadab
 - 动画事件命中窗口对同一敌人每段只结算一次伤害。
 - 脚部 Rig 只在地面空闲时取得表现所有权。
 - 常态墙边安全半径会把 Ellen 的手臂轮廓推出墙面。
+- 高速下落仍能踩中敌人顶部，胶囊墙面感知能稳定进入滑墙。
 
 ## 四、场景与配置验收
 
@@ -151,7 +152,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\Tools\Tests\RunHumanReadab
 ## 十、最终通过标准
 
 - Unity Console 无编译错误、Missing Script 和项目自有持续异常。
-- 52 项核心规格、19 项 EditMode、12 项 PlayMode 全部通过。
+- 52 项核心规格、19 项 EditMode、13 项 PlayMode 全部通过。
 - 六点生命配置、六格血条、墙滑/墙跳配置、暂停存档和 AI 四目标均可实际复现。
 - Animator 的走跑、跳跃、落地、连击、冲刺、受击、死亡与复活衔接连贯。
 - CharacterController 校准、墙边安全距离和 Generic 双脚 Rig 均可实际复现。
