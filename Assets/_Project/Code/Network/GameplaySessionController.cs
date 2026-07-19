@@ -42,6 +42,8 @@ namespace Odyssey.Networking
         public event Action StatusChanged;
         public GameplaySessionMode Mode { get; private set; }
         public bool IsStarted => _manager != null && _manager.IsListening;
+        public bool IsGameplayReady => IsStarted &&
+                                       (Mode != GameplaySessionMode.Client || _manager.IsConnectedClient);
         public bool IsMultiplayer => Mode == GameplaySessionMode.Host || Mode == GameplaySessionMode.Client;
         public bool IsAuthority => _manager != null && _manager.IsServer;
         public NetworkManager Manager => _manager;
@@ -59,9 +61,9 @@ namespace Odyssey.Networking
                     case GameplaySessionMode.SinglePlayer:
                         return IsStarted ? "单机游戏运行中" : "正在启动单机游戏";
                     case GameplaySessionMode.Host:
-                        return IsStarted ? $"Host 运行中（{ConnectedPlayerCount}/{MaximumPlayers}）" : "正在创建 Host";
+                        return IsStarted ? $"房间已创建（{ConnectedPlayerCount}/{MaximumPlayers}）" : "正在创建房间";
                     case GameplaySessionMode.Client:
-                        return _manager != null && _manager.IsConnectedClient ? "Client 已连接" : "Client 正在连接";
+                        return _manager != null && _manager.IsConnectedClient ? "已加入房间" : "正在加入房间";
                     default:
                         return string.IsNullOrWhiteSpace(LastDisconnectReason)
                             ? "请选择游戏模式"
@@ -73,7 +75,6 @@ namespace Odyssey.Networking
         private void Awake()
         {
             Application.runInBackground = true;
-            Time.timeScale = 1f;
             _manager = GetComponent<NetworkManager>();
             _unityTransport = GetComponent<UnityTransport>();
             _singlePlayerTransport = GetComponent<SinglePlayerTransport>();
@@ -141,13 +142,13 @@ namespace Odyssey.Networking
         public void Shutdown()
         {
             _shutdownRequested = true;
+            localViewBinder?.Clear();
             if (_manager != null && _manager.IsListening)
             {
                 _manager.Shutdown();
             }
 
             Mode = GameplaySessionMode.None;
-            Time.timeScale = 1f;
             StatusChanged?.Invoke();
         }
 

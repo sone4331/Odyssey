@@ -31,7 +31,7 @@ namespace Odyssey.Inputs
         private void OnDisable()
         {
             _gameInput?.Gameplay.Disable();
-            ResetSnapshot();
+            ClearSnapshot();
         }
 
         public void OnMove(InputAction.CallbackContext context)
@@ -84,7 +84,11 @@ namespace Odyssey.Inputs
             IsJumpPressed = false;
         }
 
-        private void ResetSnapshot()
+        /// <summary>
+        /// 清空当前连续输入快照，供 ESC 菜单接管操作权时消除残留方向和按键状态。
+        /// 输入资产仍保持启用，避免共享 ScriptableObject 被某个本地玩家关闭后影响后续重新绑定。
+        /// </summary>
+        public void ClearSnapshot()
         {
             MovementValue = Vector2.zero;
             IsJumpPressed = false;

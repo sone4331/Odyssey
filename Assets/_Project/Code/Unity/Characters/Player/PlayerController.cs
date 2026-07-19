@@ -85,6 +85,7 @@ namespace Odyssey.Characters.Player
         private IExternalPlayerDamageAuthority _externalDamageAuthority;
         private bool _isDead;
         private bool _started;
+        private bool _localInputEnabled = true;
 
         public CharacterController Controller { get; private set; }
         public Animator Animator { get; private set; }
@@ -103,6 +104,7 @@ namespace Odyssey.Characters.Player
         public Vector3 DesiredMoveDirection => _locomotion?.DesiredMoveDirection ?? Vector3.zero;
         public float GroundSlopeAngle => _locomotion?.GroundSlopeAngle ?? 0f;
         public bool WallClearanceActive => _locomotion?.WallClearanceActive ?? false;
+        public bool IsLocalInputEnabled => _localInputEnabled;
         public bool IsDamageImmune => _externalDamageAuthority?.IsDamageImmune ??
                                       (IsInvincible ||
                                        (Abilities?.Tags.Has(PlayerRuntimeSystems.InvulnerableTag) ?? false));
@@ -159,9 +161,7 @@ namespace Odyssey.Characters.Player
 
         private void Start()
         {
-            Cursor.lockState = CursorLockMode.Locked;
-            Cursor.visible = false;
-            MovementEnabled = true;
+            MovementEnabled = _localInputEnabled;
             _actions.Initialize();
             _locomotion.Initialize();
             _started = true;
@@ -169,7 +169,7 @@ namespace Odyssey.Characters.Player
 
         private void Update()
         {
-            if (!_started || _isDead)
+            if (!_started || _isDead || !_localInputEnabled)
             {
                 return;
             }
@@ -446,6 +446,20 @@ namespace Odyssey.Characters.Player
         }
 
         /// <summary>
+        /// 切换本机玩家是否接受玩法输入，由菜单控制器在进入游戏和打开 ESC 菜单时调用。
+        /// 这里只控制玩家自身，不处理光标、暂停或网络状态，避免多个组件争夺同一全局副作用。
+        /// </summary>
+        public void SetLocalInputEnabled(bool inputEnabled)
+        {
+            _localInputEnabled = inputEnabled;
+            MovementEnabled = inputEnabled && !_isDead;
+            if (!inputEnabled)
+            {
+                InputReader?.ClearSnapshot();
+            }
+        }
+
+        /// <summary>
         /// 应用导表后的玩家配置，并在重建领域运行时时保留当前生命。
         /// 配置层只更新数值，不创建场景对象或控制 UI，保持数据管线与表现层解耦。
         /// </summary>
@@ -491,7 +505,8 @@ namespace Odyssey.Characters.Player
 
         private void HandleAttackRequested()
         {
-            if (_isDead || _actions == null || LocomotionState != PlayerLocomotionStateId.Grounded)
+            if (!_localInputEnabled || _isDead || _actions == null ||
+                LocomotionState != PlayerLocomotionStateId.Grounded)
             {
                 return;
             }
@@ -501,7 +516,7 @@ namespace Odyssey.Characters.Player
 
         private void HandleDashRequested()
         {
-            if (_isDead || _actions == null)
+            if (!_localInputEnabled || _isDead || _actions == null)
             {
                 return;
             }
