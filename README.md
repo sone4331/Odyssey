@@ -54,7 +54,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\Tools\Tests\RunHumanReadab
 - `Odyssey/测试/运行 EditMode 测试`
 - `Odyssey/测试/运行 PlayMode 测试`
 - `Odyssey/联机/搭建原关卡合作联机`
-- `Odyssey/联机/构建原关卡双开演示`
+- `Odyssey/构建/构建 Windows 可玩版本`
 
 ## 开发环境
 

@@ -75,13 +75,13 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\Tools\Tests\RunHumanReadab
 退出 Play Mode，点击：
 
 ```text
-Odyssey → 联机 → 构建原关卡双开演示
+Odyssey → 构建 → 构建 Windows 可玩版本
 ```
 
 等待 Console 输出“原关卡合作联机构建完成”。默认文件位于：
 
 ```text
-Builds/CoopLevel/OdysseyCoop.exe
+Builds/Windows/Odyssey.exe
 ```
 
 首次运行时如果 Windows 防火墙询问是否允许访问网络，请至少勾选“专用网络”。局域网联机的两台电脑必须使用相同构建版本。
@@ -90,7 +90,7 @@ Builds/CoopLevel/OdysseyCoop.exe
 
 ### 1. 建立连接
 
-1. 双击两次 `OdysseyCoop.exe`，打开两个独立窗口。
+1. 双击两次 `Odyssey.exe`，打开两个独立窗口。
 2. 左侧窗口点击“联机游戏”，再点击“创建房间”。
 3. 等待左侧生成蓝色玩家。
 4. 右侧窗口点击“联机游戏”，在 `IP 地址` 输入框填写 `127.0.0.1`。

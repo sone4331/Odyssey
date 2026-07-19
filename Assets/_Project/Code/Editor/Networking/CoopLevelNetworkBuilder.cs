@@ -32,7 +32,7 @@ namespace Odyssey.Editor.Networking
         private const string RuntimeRootName = "合作联机_会话";
         private const string SpawnRootName = "合作联机_出生点";
         private const string EncounterNetworkRootName = "合作联机_战区状态";
-        private const string BuildOutputPath = "Builds/CoopLevel/OdysseyCoop.exe";
+        private const string BuildOutputPath = "Builds/Windows/Odyssey.exe";
 
         [MenuItem("Odyssey/联机/搭建原关卡合作联机")]
         public static void BuildLevel()
@@ -68,24 +68,24 @@ namespace Odyssey.Editor.Networking
             Debug.Log($"原关卡合作联机搭建完成：玩家 Prefab、六只怪物、{encounterAdapters} 个战区和门禁已接入 Host 权威同步。");
         }
 
-        [MenuItem("Odyssey/联机/构建原关卡双开演示")]
-        public static void BuildWindowsDemo()
+        [MenuItem("Odyssey/构建/构建 Windows 可玩版本")]
+        public static void BuildWindowsPlayable()
         {
             BuildLevel();
-            Directory.CreateDirectory(Path.GetDirectoryName(BuildOutputPath) ?? "Builds/CoopLevel");
+            Directory.CreateDirectory(Path.GetDirectoryName(BuildOutputPath) ?? "Builds/Windows");
             var report = BuildPipeline.BuildPlayer(new BuildPlayerOptions
             {
                 scenes = new[] { ScenePath },
                 locationPathName = BuildOutputPath,
                 target = BuildTarget.StandaloneWindows64,
-                options = BuildOptions.Development
+                options = BuildOptions.None
             });
             if (report.summary.result != BuildResult.Succeeded)
             {
-                throw new BuildFailedException($"原关卡合作联机构建失败：{report.summary.result}");
+                throw new BuildFailedException($"Windows 可玩版本构建失败：{report.summary.result}");
             }
 
-            Debug.Log($"原关卡合作联机构建完成：{Path.GetFullPath(BuildOutputPath)}");
+            Debug.Log($"Windows 可玩版本构建完成：{Path.GetFullPath(BuildOutputPath)}");
             EditorUtility.RevealInFinder(BuildOutputPath);
         }
 
