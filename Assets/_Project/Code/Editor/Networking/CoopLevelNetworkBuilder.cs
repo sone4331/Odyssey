@@ -236,7 +236,7 @@ namespace Odyssey.Editor.Networking
             runtime.AddComponent<SinglePlayerTransport>();
             var binder = runtime.AddComponent<GameplayLocalViewBinder>();
             var session = runtime.AddComponent<GameplaySessionController>();
-            runtime.AddComponent<GameplaySessionHud>();
+            var saveManager = runtime.AddComponent<SaveManager>();
 
             manager.NetworkConfig = new NetworkConfig
             {
@@ -253,13 +253,20 @@ namespace Odyssey.Editor.Networking
             SetObjectArray(session, "spawnPoints", spawnPoints.Cast<Object>().ToArray());
             SetObjectReference(session, "localViewBinder", binder);
             SetObjectReference(binder, "healthUi", Object.FindFirstObjectByType<PlayerHealthUI>(FindObjectsInactive.Include));
-            SetObjectReference(binder, "saveManager", Object.FindFirstObjectByType<SaveManager>(FindObjectsInactive.Include));
+            SetObjectReference(binder, "saveManager", saveManager);
+            var freeLook = Object.FindFirstObjectByType<CinemachineFreeLook>(FindObjectsInactive.Include);
+            SetObjectReference(binder, "freeLookCamera", freeLook);
+            SetObjectReference(
+                binder,
+                "cameraInputProvider",
+                freeLook == null ? null : freeLook.GetComponent<CinemachineInputProvider>());
             SetObjectArray(
                 binder,
                 "impactFeedbacks",
                 Object.FindObjectsByType<CombatImpactFeedback>(FindObjectsInactive.Include, FindObjectsSortMode.None)
                     .Cast<Object>()
                     .ToArray());
+            GameMenuSceneBuilder.Build(runtime, session, binder, saveManager);
         }
 
         private static Transform[] BuildSpawnPoints(Vector3 origin)
@@ -305,6 +312,18 @@ namespace Odyssey.Editor.Networking
             }
 
             foreach (var camera in Object.FindObjectsByType<CinemachineVirtualCamera>(
+                         FindObjectsInactive.Include,
+                         FindObjectsSortMode.None))
+            {
+                if (camera.Follow == null || camera.Follow.GetComponentInParent<PlayerController>() != null)
+                {
+                    camera.Follow = null;
+                    camera.LookAt = null;
+                    EditorUtility.SetDirty(camera);
+                }
+            }
+
+            foreach (var camera in Object.FindObjectsByType<CinemachineFreeLook>(
                          FindObjectsInactive.Include,
                          FindObjectsSortMode.None))
             {

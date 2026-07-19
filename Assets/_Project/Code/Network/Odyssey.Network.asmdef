@@ -8,6 +8,7 @@
     "Unity.Netcode.Components",
     "Unity.Networking.Transport",
     "Unity.InputSystem",
+    "Unity.ugui",
     "Cinemachine"
   ],
   "includePlatforms": [],

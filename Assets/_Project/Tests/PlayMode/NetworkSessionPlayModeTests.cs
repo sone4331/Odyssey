@@ -10,6 +10,8 @@ using UnityEngine;
 using UnityEngine.AI;
 using UnityEngine.SceneManagement;
 using UnityEngine.TestTools;
+using UnityEngine.EventSystems;
+using UnityEngine.InputSystem.UI;
 
 namespace Odyssey.Tests.PlayMode
 {
@@ -45,6 +47,22 @@ namespace Odyssey.Tests.PlayMode
             }
 
             yield return null;
+            yield return null;
+        }
+
+        [UnityTest]
+        public IEnumerator StartupMenu_IsClickableAndFreezesGameplayBeforeModeSelection()
+        {
+            var menu = Object.FindFirstObjectByType<GameMenuController>();
+            var eventSystem = Object.FindFirstObjectByType<EventSystem>();
+            Assert.That(menu, Is.Not.Null, "Level_01 缺少全屏主菜单");
+            Assert.That(menu.CurrentPage, Is.EqualTo(GameMenuPage.MainMenu));
+            Assert.That(menu.IsMenuVisible, Is.True);
+            Assert.That(Time.timeScale, Is.Zero);
+            Assert.That(Cursor.visible, Is.True);
+            Assert.That(eventSystem, Is.Not.Null);
+            Assert.That(eventSystem.GetComponent<InputSystemUIInputModule>(), Is.Not.Null,
+                "EventSystem 没有使用新输入系统 UI 模块");
             yield return null;
         }
 

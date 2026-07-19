@@ -9,6 +9,8 @@
     "Unity.Netcode.Runtime",
     "Unity.Netcode.Components",
     "Unity.Networking.Transport",
+    "Unity.InputSystem",
+    "Unity.ugui",
     "Cinemachine",
     "UnityEngine.TestRunner",
     "UnityEditor.TestRunner"

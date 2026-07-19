@@ -8,9 +8,9 @@ using Odyssey.Characters.Player;
 using Odyssey.Gameplay.AI;
 using Odyssey.Gameplay.Config;
 using Odyssey.Encounters;
-using Odyssey.Systems;
 using Odyssey.Unity.UI;
 using Odyssey.Networking;
+using Cinemachine;
 using Unity.Netcode.Transports.SinglePlayer;
 using UnityEngine;
 using UnityEngine.Animations.Rigging;
@@ -117,25 +117,42 @@ namespace Odyssey.Tests.PlayMode
         }
 
         [UnityTest]
-        public IEnumerator PauseFacade_AtomicallyUpdatesPanelAndTimeScale()
+        public IEnumerator EscapeMenu_AtomicallyUpdatesLocalInputAndTimeScale()
         {
-            var saveManager = Object.FindFirstObjectByType<SaveManager>();
-            var pauseMenu = saveManager == null
-                ? null
-                : saveManager.transform.Find("PauseMenu")?.gameObject;
+            var menu = Object.FindFirstObjectByType<GameMenuController>();
+            var binder = Object.FindFirstObjectByType<GameplayLocalViewBinder>();
+            Assert.That(menu, Is.Not.Null, "场景中未找到统一菜单控制器");
+            Assert.That(binder, Is.Not.Null, "场景中未找到本地视图绑定器");
 
-            Assert.That(saveManager, Is.Not.Null, "场景中未找到暂停与存档门面");
-            Assert.That(pauseMenu, Is.Not.Null, "场景中未找到暂停面板");
-
-            saveManager.PauseGame();
+            menu.OpenPauseMenu();
             yield return null;
             Assert.That(Time.timeScale, Is.Zero);
-            Assert.That(pauseMenu.activeSelf, Is.True);
+            Assert.That(menu.CurrentPage, Is.EqualTo(GameMenuPage.PauseMenu));
+            Assert.That(binder.IsGameplayInputEnabled, Is.False);
 
-            saveManager.ResumeGame();
+            menu.ResumeGame();
             yield return null;
             Assert.That(Time.timeScale, Is.EqualTo(1f));
-            Assert.That(pauseMenu.activeSelf, Is.False);
+            Assert.That(menu.CurrentPage, Is.EqualTo(GameMenuPage.Gameplay));
+            Assert.That(binder.IsGameplayInputEnabled, Is.True);
+        }
+
+        [UnityTest]
+        public IEnumerator LocalOwner_BindsFreeLookCameraAndCameraInput()
+        {
+            var player = Object.FindFirstObjectByType<PlayerController>();
+            var binder = Object.FindFirstObjectByType<GameplayLocalViewBinder>();
+            var freeLook = Object.FindFirstObjectByType<CinemachineFreeLook>();
+
+            Assert.That(player, Is.Not.Null);
+            Assert.That(binder, Is.Not.Null);
+            Assert.That(freeLook, Is.Not.Null, "Level_01 缺少 FreeLook 摄像机");
+            Assert.That(binder.LocalPlayer, Is.SameAs(player));
+            Assert.That(freeLook.Follow, Is.Not.Null, "FreeLook 没有绑定本机 Owner");
+            Assert.That(freeLook.LookAt, Is.SameAs(freeLook.Follow));
+            Assert.That(freeLook.Follow.GetComponentInParent<PlayerController>(), Is.SameAs(player));
+            Assert.That(freeLook.GetComponent<CinemachineInputProvider>().enabled, Is.True);
+            yield return null;
         }
 
         [UnityTest]
