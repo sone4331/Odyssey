@@ -136,8 +136,8 @@ namespace Odyssey.Tests.PlayMode
                 .First(candidate => candidate.AttackDamage > 0 && candidate.CurrentHealth > 0);
             Assert.That(playerAdapter, Is.Not.Null);
 
-            // 关闭双方玩法更新，只保留 Collider 和 NetworkPlayerAdapter，确保扣血确实来自 Host 接触复核，
-            // 而不是本机 PlayerController.OnControllerColliderHit 或怪物行为树的咬击时序。
+            // 关闭双方玩法更新，只保留 Collider 和 NetworkPlayerAdapter，确保扣血确实来自 Host 复用的精确重叠查询，
+            // 而不是玩家本地更新或怪物行为树的攻击动画。
             player.enabled = false;
             enemy.enabled = false;
             var agent = enemy.GetComponent<NavMeshAgent>();
@@ -146,16 +146,22 @@ namespace Odyssey.Tests.PlayMode
                 agent.enabled = false;
             }
 
+            var bodyCollider = enemy.GetComponentsInChildren<Collider>(true)
+                .First(candidate => !candidate.isTrigger && candidate.enabled);
             player.Controller.enabled = false;
-            player.transform.position = enemy.transform.position;
+            player.transform.position = bodyCollider.bounds.center - player.transform.rotation * player.Controller.center;
             player.Controller.enabled = true;
             Physics.SyncTransforms();
             var healthBeforeContact = playerAdapter.CurrentHealth;
 
-            yield return new WaitForSeconds(0.35f);
+            yield return new WaitForFixedUpdate();
+            yield return new WaitForFixedUpdate();
 
             Assert.That(playerAdapter.CurrentHealth, Is.EqualTo(healthBeforeContact - enemy.AttackDamage),
                 "Host 没有结算怪物接触伤害，或保护期内发生了重复扣血");
+            yield return new WaitForSeconds(0.3f);
+            Assert.That(playerAdapter.CurrentHealth, Is.EqualTo(healthBeforeContact - enemy.AttackDamage),
+                "Host 在受伤保护期间重复结算了接触伤害");
         }
     }
 }

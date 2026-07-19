@@ -23,8 +23,6 @@ namespace Odyssey.Characters.Player
         public const string AttackAbilityId = PlayerRuntimeSystems.AttackAbilityId;
         public const string DashAbilityId = PlayerRuntimeSystems.DashAbilityId;
         public const string HitAbilityId = PlayerRuntimeSystems.HitAbilityId;
-        private const float ContactAuditInterval = 0.05f;
-        private const float ContactPadding = 0.2f;
         private static readonly Collider[] ContactBuffer = new Collider[16];
 
         [Header("配置")]
@@ -90,7 +88,6 @@ namespace Odyssey.Characters.Player
         private bool _isDead;
         private bool _started;
         private bool _localInputEnabled = true;
-        private float _nextContactAuditTime;
 
         public CharacterController Controller { get; private set; }
         public Animator Animator { get; private set; }
@@ -179,7 +176,6 @@ namespace Odyssey.Characters.Player
                 return;
             }
 
-            CheckEnemyContactLocally();
             if (!_localInputEnabled)
             {
                 return;
@@ -201,11 +197,16 @@ namespace Odyssey.Characters.Player
             InputReader.DashRequested -= HandleDashRequested;
         }
 
-        private void OnControllerColliderHit(ControllerColliderHit hit)
+        private void FixedUpdate()
         {
-            if (((1 << hit.gameObject.layer) & EnemyLayer) != 0)
+            if (!_started || _isDead || _externalDamageAuthority != null)
             {
-                TryTakeDamage(1, hit.transform.position, "enemy_contact");
+                return;
+            }
+
+            if (TryGetTouchingEnemy(out var enemy))
+            {
+                TryTakeDamage(enemy.AttackDamage, enemy.transform.position, "enemy_contact");
             }
         }
 
@@ -218,20 +219,26 @@ namespace Odyssey.Characters.Player
         }
 
         /// <summary>
-        /// 在单机模式主动检测怪物与玩家胶囊的视觉接触，不再依赖玩家移动时才触发的 OnControllerColliderHit。
-        /// 联机模式由 NetworkPlayerAdapter 在 Host 上执行同类复核，因此本方法发现外部生命权威后立即退出，避免双重结算。
+        /// 使用玩家真实 CharacterController 胶囊查询正在发生物理重叠的存活怪物。
+        /// 单机与 Host 共用该查询，避免各自维护接触余量或不同形状；只有碰撞体真正重叠才返回命中。
         /// </summary>
-        private void CheckEnemyContactLocally()
+        public bool TryGetTouchingEnemy(out Enemy touchingEnemy)
         {
-            if (_externalDamageAuthority != null || Controller == null || Time.time < _nextContactAuditTime)
+            touchingEnemy = null;
+            if (Controller == null || !Controller.enabled)
             {
-                return;
+                return false;
             }
 
-            _nextContactAuditTime = Time.time + ContactAuditInterval;
             var center = transform.TransformPoint(Controller.center);
-            var radius = Controller.radius + ContactPadding;
-            var halfSegment = Mathf.Max(0f, Controller.height * 0.5f - Controller.radius);
+            var scale = transform.lossyScale;
+            var horizontalScale = Mathf.Max(Mathf.Abs(scale.x), Mathf.Abs(scale.z));
+            // CharacterController 会把深度重叠修正为表面接触；Skin Width 是物理系统允许的接触壳，
+            // 这里只补偿该真实物理间隙，不再使用与模型视觉尺寸相关的额外攻击范围。
+            var contactTolerance = Mathf.Max(Physics.defaultContactOffset, Controller.skinWidth) * horizontalScale;
+            var radius = Controller.radius * horizontalScale + contactTolerance;
+            var height = Controller.height * Mathf.Abs(scale.y);
+            var halfSegment = Mathf.Max(0f, height * 0.5f - radius);
             var axis = transform.up * halfSegment;
             var count = Physics.OverlapCapsuleNonAlloc(
                 center - axis,
@@ -241,6 +248,7 @@ namespace Odyssey.Characters.Player
                 EnemyLayer,
                 QueryTriggerInteraction.Ignore);
 
+            var nearestDistanceSquared = float.PositiveInfinity;
             for (var index = 0; index < count; index++)
             {
                 var enemy = ContactBuffer[index] == null
@@ -251,9 +259,17 @@ namespace Odyssey.Characters.Player
                     continue;
                 }
 
-                TryTakeDamage(enemy.AttackDamage, enemy.transform.position, "enemy_contact");
-                break;
+                var distanceSquared = (enemy.transform.position - center).sqrMagnitude;
+                if (distanceSquared >= nearestDistanceSquared)
+                {
+                    continue;
+                }
+
+                nearestDistanceSquared = distanceSquared;
+                touchingEnemy = enemy;
             }
+
+            return touchingEnemy != null;
         }
 
         /// <summary>

@@ -35,7 +35,6 @@ namespace Odyssey.Characters.Enemies
         private float _attackWindup;
         private float _pendingAttackRemaining = -1f;
         private Vector3 _pendingTargetPosition;
-        private Action _applyMeleeDamage;
         private Action<Vector3> _launchProjectile;
         private Action<bool> _setTelegraph;
 
@@ -59,7 +58,7 @@ namespace Odyssey.Characters.Enemies
         public void SetTarget(Transform target) => _target = target;
 
         /// <summary>
-        /// 推进受击锁、攻击锁和前摇命中计时。时序独立于当前树分支，保证一次已开始的攻击不会因动画状态更新而丢失命中帧。
+        /// 推进受击锁、攻击锁和远程攻击前摇。近战伤害由身体碰撞体重叠决定，不再使用时间猜测命中帧。
         /// </summary>
         public void TickTimers(float deltaTime)
         {
@@ -74,19 +73,16 @@ namespace Odyssey.Characters.Enemies
         public void ConfigurePatrol(EnemyPatrolRoute patrolRoute) => _patrolRoute = patrolRoute;
 
         /// <summary>
-        /// 注入近战或投射物攻击策略。权威命中只由代码前摇触发，Animator 只负责表现。
-        /// 采用单一计时源可以避免动画事件与代码各等待一次，确保单机与 Host 使用完全一致的伤害时刻。
+        /// 注入攻击表现与投射物策略。近战攻击只播放动画，Spitter 才在前摇结束后创建投射物。
         /// </summary>
         public void ConfigureAttack(
             EnemyAttackMode attackMode,
             float attackWindup,
-            Action applyMeleeDamage,
             Action<Vector3> launchProjectile,
             Action<bool> setTelegraph)
         {
             _attackMode = attackMode;
             _attackWindup = Mathf.Max(0f, attackWindup);
-            _applyMeleeDamage = applyMeleeDamage;
             _launchProjectile = launchProjectile;
             _setTelegraph = setTelegraph;
             CancelPendingAttack();
@@ -215,11 +211,15 @@ namespace Odyssey.Characters.Enemies
             FaceTarget(1f);
             _lastAttackTime = currentTime;
             _attackLockRemaining = Mathf.Max(1.2f, _attackWindup + 0.35f);
-            _pendingAttackRemaining = _attackWindup;
             if (_attackMode == EnemyAttackMode.Projectile)
             {
+                _pendingAttackRemaining = _attackWindup;
                 _pendingTargetPosition = _target.position + Vector3.up * 0.75f;
                 _setTelegraph?.Invoke(true);
+            }
+            else
+            {
+                _pendingAttackRemaining = -1f;
             }
             PlayAnimation("Attack", 0.08f);
             return BehaviorStatus.Running;
@@ -391,7 +391,7 @@ namespace Odyssey.Characters.Enemies
         }
 
         /// <summary>
-        /// 以配置前摇驱动权威命中时刻；近战和投射物都只提交一次，便于后续 Host 权威网络层复用同一规则。
+        /// 只处理远程投射物前摇；近战伤害完全由玩家与怪物身体碰撞体的重叠结果决定。
         /// </summary>
         private void TickPendingAttack(float deltaTime)
         {
@@ -407,15 +407,8 @@ namespace Odyssey.Characters.Enemies
             }
 
             _pendingAttackRemaining = -1f;
-            if (_attackMode == EnemyAttackMode.Projectile)
-            {
-                _setTelegraph?.Invoke(false);
-                _launchProjectile?.Invoke(_pendingTargetPosition);
-            }
-            else
-            {
-                _applyMeleeDamage?.Invoke();
-            }
+            _setTelegraph?.Invoke(false);
+            _launchProjectile?.Invoke(_pendingTargetPosition);
         }
 
         private void CancelPendingAttack()

@@ -19,11 +19,8 @@ namespace Odyssey.Networking
         private const float ComboContinuationWindow = 0.9f;
         private const float PositionAuditInterval = 0.2f;
         private const float PositionTolerance = 1.5f;
-        private const float ContactAuditInterval = 0.05f;
-        private const float ContactPadding = 0.2f;
         private const float DamageInvulnerabilityDuration = 1.5f;
         private static readonly Collider[] AttackBuffer = new Collider[24];
-        private static readonly Collider[] ContactBuffer = new Collider[16];
 
         private readonly NetworkVariable<int> _health = new NetworkVariable<int>(
             1,
@@ -45,7 +42,6 @@ namespace Odyssey.Networking
         private double _nextAttackChainTime;
         private double _nextDashTime;
         private double _nextPositionAuditTime;
-        private double _nextContactAuditTime;
         private Vector3 _lastAcceptedPosition;
         private bool _respawning;
         private bool _usesNetworkGameplayAuthority;
@@ -120,7 +116,6 @@ namespace Odyssey.Networking
                 return;
             }
 
-            CheckEnemyContactOnHost();
             if (IsOwner || _respawning || NetworkManager.ServerTime.Time < _nextPositionAuditTime)
             {
                 return;
@@ -138,6 +133,14 @@ namespace Odyssey.Networking
             }
 
             _lastAcceptedPosition = transform.position;
+        }
+
+        private void FixedUpdate()
+        {
+            if (IsServer)
+            {
+                CheckEnemyContactOnHost();
+            }
         }
 
         public void Resolve(PlayerController player, int comboIndex)
@@ -184,9 +187,8 @@ namespace Odyssey.Networking
         }
 
         /// <summary>
-        /// 在 Host 上用玩家真实胶囊检测怪物接触，并直接提交权威伤害。
-        /// Owner 驱动移动时，Client 的 OnControllerColliderHit 无权修改生命；因此必须由 Host 根据复制位置复核接触，
-        /// 这样 Host 与 Client 都遵循同一规则，也不会把伤害结果交给客户端自行决定。
+        /// 在 Host 上复用 PlayerController 的真实胶囊重叠查询并提交权威伤害。
+        /// Client 只复制位置和生命结果，不维护另一套接触尺寸，也不能自行决定伤害。
         /// </summary>
         private void CheckEnemyContactOnHost()
         {
@@ -196,39 +198,12 @@ namespace Odyssey.Networking
                 return;
             }
 
-            var now = NetworkManager.ServerTime.Time;
-            if (now < _nextContactAuditTime)
+            if (!_player.TryGetTouchingEnemy(out var enemy))
             {
                 return;
             }
 
-            _nextContactAuditTime = now + ContactAuditInterval;
-            var controller = _player.Controller;
-            var center = transform.TransformPoint(controller.center);
-            var radius = controller.radius + ContactPadding;
-            var halfSegment = Mathf.Max(0f, controller.height * 0.5f - controller.radius);
-            var axis = transform.up * halfSegment;
-            var count = Physics.OverlapCapsuleNonAlloc(
-                center - axis,
-                center + axis,
-                radius,
-                ContactBuffer,
-                _player.EnemyLayer,
-                QueryTriggerInteraction.Ignore);
-
-            for (var index = 0; index < count; index++)
-            {
-                var enemy = ContactBuffer[index] == null
-                    ? null
-                    : ContactBuffer[index].GetComponentInParent<Enemy>();
-                if (enemy == null || enemy.CurrentHealth <= 0)
-                {
-                    continue;
-                }
-
-                TryTakeDamage(enemy.AttackDamage, enemy.transform.position, "enemy_contact");
-                break;
-            }
+            TryTakeDamage(enemy.AttackDamage, enemy.transform.position, "enemy_contact");
         }
 
         [ServerRpc]

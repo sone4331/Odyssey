@@ -143,7 +143,6 @@ namespace Odyssey.Characters.Enemies
             _actions.ConfigureAttack(
                 _attackMode,
                 _attackWindup,
-                CommitMeleeDamage,
                 LaunchProjectile,
                 SetAttackTelegraph);
             _appliedConfig = config;
@@ -183,40 +182,6 @@ namespace Odyssey.Characters.Enemies
         public void TakeDamage(int damage)
         {
             Apply(new DamageRequest(damage, "player"));
-        }
-
-        /// <summary>
-        /// 在配置的攻击前摇结束时提交一次近战伤害。
-        /// 采用代码计时作为唯一权威来源，避免第三方动画事件与行为层重复等待；命中时仍复核距离与朝向。
-        /// </summary>
-        private void CommitMeleeDamage()
-        {
-            if (_isDead || _attackMode != EnemyAttackMode.Melee)
-            {
-                return;
-            }
-
-            var player = _perception.Target == null
-                ? null
-                : _perception.Target.GetComponentInParent<Player.PlayerController>();
-            if (player == null || player.CurrentHealth <= 0)
-            {
-                return;
-            }
-
-            var toPlayer = Vector3.ProjectOnPlane(player.transform.position - transform.position, Vector3.up);
-            if (toPlayer.magnitude > AttackRange || toPlayer.sqrMagnitude <= 0.001f)
-            {
-                return;
-            }
-
-            // 命中时再次校验朝向，避免玩家已经绕到怪物身后仍被“空气咬”结算伤害。
-            if (Vector3.Dot(transform.forward, toPlayer.normalized) < 0.35f)
-            {
-                return;
-            }
-
-            player.TakeDamage(AttackDamage, transform.position);
         }
 
         private void RebuildHealth(int maximum, int current)
@@ -266,7 +231,6 @@ namespace Odyssey.Characters.Enemies
             _actions.ConfigureAttack(
                 _attackMode,
                 _attackWindup,
-                CommitMeleeDamage,
                 LaunchProjectile,
                 SetAttackTelegraph);
         }
@@ -399,7 +363,7 @@ namespace Odyssey.Characters.Enemies
             transform.localScale = Vector3.Lerp(transform.localScale, Vector3.zero, Time.deltaTime * 3f);
         }
 
-        // 以下公开方法只用于兼容 3D Game Kit Lite 动画事件；玩法伤害统一由代码前摇提交。
+        // 以下公开方法只用于兼容 3D Game Kit Lite 动画事件；近战伤害只由身体碰撞体重叠提交。
         public void AttackBegin() { }
         public void AttackEnd() { }
         public void PlayStep() { }

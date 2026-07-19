@@ -117,7 +117,7 @@ namespace Odyssey.Tests.PlayMode
         }
 
         [UnityTest]
-        public IEnumerator SinglePlayer_VisualEnemyContactDamagesWithoutWaitingForBehaviorAttack()
+        public IEnumerator SinglePlayer_ExactColliderOverlapDamagesOnce()
         {
             var player = Object.FindFirstObjectByType<PlayerController>();
             var enemies = Object.FindObjectsByType<Enemy>(FindObjectsInactive.Exclude, FindObjectsSortMode.None);
@@ -132,19 +132,28 @@ namespace Odyssey.Tests.PlayMode
                 }
             }
 
-            player.SetHealth(player.MaxHealth, "单机视觉接触测试");
+            var bodyCollider = enemy.GetComponentsInChildren<Collider>(true)
+                .First(candidate => !candidate.isTrigger && candidate.enabled);
+            Assert.That(bodyCollider, Is.Not.Null, "近战怪物缺少可用于接触伤害的身体碰撞体");
+
+            player.SetHealth(player.MaxHealth, "单机碰撞体重叠测试");
             player.Controller.enabled = false;
-            // Chomper 渲染模型的前后半径约 0.81 米，而物理 BoxCollider 只有约 0.42 米。
-            // 0.95 米处已经发生明显模型重叠，但原 OnControllerColliderHit 尚不会触发。
-            player.transform.position = enemy.transform.position + enemy.transform.forward * 0.95f;
+            player.transform.position = bodyCollider.bounds.center - player.transform.rotation * player.Controller.center;
             player.Controller.enabled = true;
             Physics.SyncTransforms();
             var healthBeforeContact = player.CurrentHealth;
 
-            yield return new WaitForSeconds(0.25f);
+            Assert.That(player.TryGetTouchingEnemy(out var touchingEnemy), Is.True,
+                "玩家真实胶囊与怪物身体碰撞体重叠后没有返回接触目标");
+            Assert.That(touchingEnemy, Is.EqualTo(enemy));
+            yield return new WaitForFixedUpdate();
+            yield return new WaitForFixedUpdate();
 
             Assert.That(player.CurrentHealth, Is.EqualTo(healthBeforeContact - enemy.AttackDamage),
-                "单机视觉重叠后仍在等待行为树攻击前摇，没有立即结算接触伤害");
+                "单机碰撞体重叠后没有在物理帧内结算一次接触伤害");
+            yield return new WaitForSeconds(0.3f);
+            Assert.That(player.CurrentHealth, Is.EqualTo(healthBeforeContact - enemy.AttackDamage),
+                "受伤保护期间持续重叠导致了重复扣血");
         }
 
         [UnityTest]
@@ -602,12 +611,18 @@ namespace Odyssey.Tests.PlayMode
             yield return new WaitForSeconds(0.15f);
             Assert.That(enemy.CurrentGoal, Is.EqualTo(EnemyGoal.Attack),
                 "玩家进入攻击范围后，场景怪物没有从 Chase 切换到 Attack");
-            yield return new WaitForSeconds(0.15f);
+            yield return new WaitForSeconds(0.7f);
             Assert.That(player.CurrentHealth, Is.EqualTo(healthBeforeAttack),
-                "Chomper 的伤害在攻击动作刚开始时就提前结算");
-            yield return new WaitForSeconds(0.45f);
+                "玩家未与怪物身体碰撞体重叠时，攻击动画或距离判断仍然造成了伤害");
+
+            var bodyCollider = enemy.GetComponentsInChildren<Collider>(true)
+                .First(candidate => !candidate.isTrigger && candidate.enabled);
+            MovePlayer(player, bodyCollider.bounds.center - player.transform.rotation * player.Controller.center);
+            Physics.SyncTransforms();
+            yield return new WaitForFixedUpdate();
+            yield return new WaitForFixedUpdate();
             Assert.That(player.CurrentHealth, Is.LessThan(healthBeforeAttack),
-                "Chomper 主动攻击后仍未在 0.6 秒内结算伤害");
+                "玩家与怪物身体碰撞体重叠后没有立即受到接触伤害");
 
             MovePlayer(player, enemy.transform.position + Vector3.forward * (enemy.ForgetRange + 3f));
             yield return new WaitForSeconds(0.25f);
