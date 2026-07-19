@@ -10,6 +10,8 @@ using Odyssey.Gameplay.Config;
 using Odyssey.Encounters;
 using Odyssey.Systems;
 using Odyssey.Unity.UI;
+using Odyssey.Networking;
+using Unity.Netcode.Transports.SinglePlayer;
 using UnityEngine;
 using UnityEngine.Animations.Rigging;
 using UnityEngine.SceneManagement;
@@ -36,12 +38,34 @@ namespace Odyssey.Tests.PlayMode
             // 多等待一帧，让 RuntimeInitialize、场景 Installer 和各组件 Start 完成装配。
             yield return null;
             yield return null;
+
+            var session = Object.FindFirstObjectByType<GameplaySessionController>();
+            if (session != null && !session.IsStarted)
+            {
+                Assert.That(session.StartSinglePlayer(), Is.True, "PlayMode 测试无法启动原关卡单机传输");
+            }
+
+            for (var frame = 0;
+                 frame < 120 && Object.FindFirstObjectByType<PlayerController>() == null;
+                 frame++)
+            {
+                yield return null;
+            }
+
+            yield return null;
         }
 
         [UnityTearDown]
         public IEnumerator RestoreGlobalState()
         {
             Time.timeScale = 1f;
+            var session = Object.FindFirstObjectByType<GameplaySessionController>();
+            if (session != null)
+            {
+                session.Shutdown();
+                Object.Destroy(session.gameObject);
+            }
+
             yield return null;
         }
 
@@ -70,6 +94,26 @@ namespace Odyssey.Tests.PlayMode
                 "玩家 Prefab 缺少脚部贴地控制器");
 
             yield return null;
+        }
+
+        [UnityTest]
+        public IEnumerator SinglePlayerSession_UsesNoPortTransportAndKeepsLocalHealthAuthority()
+        {
+            var session = Object.FindFirstObjectByType<GameplaySessionController>();
+            var player = Object.FindFirstObjectByType<PlayerController>();
+
+            Assert.That(session, Is.Not.Null);
+            Assert.That(session.Mode, Is.EqualTo(GameplaySessionMode.SinglePlayer));
+            Assert.That(session.Manager.NetworkConfig.NetworkTransport, Is.TypeOf<SinglePlayerTransport>(),
+                "单机模式没有使用 NGO 原生无端口传输");
+            Assert.That(player, Is.Not.Null);
+            Assert.That(player.RespawnPoint, Is.Not.Null, "单机运行时没有恢复 Level_01 复活点引用");
+
+            player.SetHealth(player.MaxHealth - 2, "单机存档恢复测试");
+            yield return null;
+
+            Assert.That(player.CurrentHealth, Is.EqualTo(player.MaxHealth - 2),
+                "单机生命仍被网络权威接管，读取存档无法恢复实际生命");
         }
 
         [UnityTest]
@@ -238,10 +282,21 @@ namespace Odyssey.Tests.PlayMode
             Assert.That(player, Is.Not.Null, "场景中未找到投射物目标");
             var playerPosition = player.transform.position;
 
+            // 本用例只验证单个投射物的命中次数与生命周期，先停用关卡内自主运行的敌人，
+            // 避免它们在投射物飞行期间通过接触或攻击额外扣血，造成跨系统测试污染。
+            foreach (var sceneEnemy in Object.FindObjectsByType<Enemy>(
+                         FindObjectsInactive.Exclude,
+                         FindObjectsSortMode.None))
+            {
+                sceneEnemy.gameObject.SetActive(false);
+            }
+
             var ownerObject = GameObject.CreatePrimitive(PrimitiveType.Cube);
             ownerObject.name = "投射物测试发射者";
             ownerObject.transform.position = playerPosition - Vector3.forward * 2f;
             var owner = ownerObject.AddComponent<Enemy>();
+            // 发射者只作为友军过滤与来源坐标，不应在本用例中自行运行行为树并追加近战伤害。
+            owner.enabled = false;
 
             var projectileObject = new GameObject("投射物命中测试");
             projectileObject.transform.position = ownerObject.transform.position + Vector3.up * 0.9f;

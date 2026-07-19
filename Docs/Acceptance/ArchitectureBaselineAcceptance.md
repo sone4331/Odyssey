@@ -9,7 +9,7 @@
 - 怪物使用 Gameplay `Health / DamageRequest / DamageResult`，不再直接维护公开生命整数。
 - 玩家最大生命为 6，怪物战斗参数由 CSV 和运行时配置资产驱动。
 
-玩家 Locomotion 状态机、分层 AI 和 NetworkArena 尚未包含在本阶段验收范围内。
+玩家 Locomotion 状态机、分层 AI 和原关卡合作联机属于后续里程碑，不包含在本基线阶段的历史验收范围内。
 
 ## 一、打开正确工程
 

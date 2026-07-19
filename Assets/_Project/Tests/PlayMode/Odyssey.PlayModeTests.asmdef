@@ -8,6 +8,7 @@
     "Odyssey.Network",
     "Unity.Netcode.Runtime",
     "Unity.Netcode.Components",
+    "Unity.Networking.Transport",
     "Unity.Animation.Rigging",
     "Unity.ugui"
   ],

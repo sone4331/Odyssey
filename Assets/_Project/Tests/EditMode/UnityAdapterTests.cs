@@ -577,16 +577,16 @@ namespace Odyssey.Tests
         public void ProjectStructure_UsesMigratedSceneAndPreservesCriticalGuids()
         {
             const string scenePath = "Assets/_Project/Content/Scenes/Level_01.unity";
-            const string networkScenePath = "Assets/_Project/Content/Scenes/NetworkArena.unity";
+            const string coopPlayerPath = "Assets/_Project/Content/Prefabs/Network/CoopPlayer.prefab";
             const string healthUiPath = "Assets/_Project/Code/Unity/UI/PlayerHealthUI.cs";
             const string playerPath = "Assets/_Project/Code/Unity/Characters/Player/PlayerController.cs";
             const string inputReaderPath = "Assets/_Project/Data/UnityAssets/Input/PlayerInputReader.asset";
 
             Assert.That(AssetDatabase.LoadAssetAtPath<SceneAsset>(scenePath), Is.Not.Null);
-            Assert.That(AssetDatabase.LoadAssetAtPath<SceneAsset>(networkScenePath), Is.Not.Null);
-            Assert.That(EditorBuildSettings.scenes.Length, Is.EqualTo(2));
+            Assert.That(AssetDatabase.LoadAssetAtPath<GameObject>(coopPlayerPath), Is.Not.Null);
+            Assert.That(EditorBuildSettings.scenes.Length, Is.EqualTo(1));
             Assert.That(EditorBuildSettings.scenes[0].path, Is.EqualTo(scenePath));
-            Assert.That(EditorBuildSettings.scenes[1].path, Is.EqualTo(networkScenePath));
+            Assert.That(AssetDatabase.LoadAssetAtPath<SceneAsset>("Assets/_Project/Content/Scenes/NetworkArena.unity"), Is.Null);
             Assert.That(AssetDatabase.AssetPathToGUID(healthUiPath), Is.EqualTo("752cb09d697c4375af4ea10b03fe7ca5"));
             Assert.That(AssetDatabase.AssetPathToGUID(playerPath), Is.EqualTo("cd9defc8c3d24d3d971a34755db37fe1"));
             Assert.That(AssetDatabase.LoadAssetAtPath<InputReader>(inputReaderPath), Is.Not.Null);
