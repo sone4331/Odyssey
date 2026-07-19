@@ -39,7 +39,7 @@ MonoBehaviour:
   enemies:
   - id: chomper
     chaseRange: 10
-    attackRange: 2
+    attackRange: 0.85
     maxHealth: 3
     attackDamage: 1
     attackCooldown: 2

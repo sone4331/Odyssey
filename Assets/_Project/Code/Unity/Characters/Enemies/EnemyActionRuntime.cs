@@ -14,6 +14,7 @@ namespace Odyssey.Characters.Enemies
     {
         private const float ChaseRefreshInterval = 0.15f;
         private const float RetreatRefreshInterval = 0.25f;
+        private const float MeleeStoppingDistance = 0.1f;
 
         private readonly Transform _owner;
         private readonly Animator _animator;
@@ -386,7 +387,11 @@ namespace Odyssey.Characters.Enemies
             if (_agent != null && _combatMoveSpeed > 0f)
             {
                 _agent.speed = _combatMoveSpeed;
-                _agent.stoppingDistance = _combatStoppingDistance;
+                // Chomper 必须追到双方身体碰撞体真正接触后才进入攻击。
+                // 场景原值 1.5 米用于旧距离攻击，会让模型看似扑到玩家身边但物理体仍相隔约一米。
+                _agent.stoppingDistance = _attackMode == EnemyAttackMode.Melee
+                    ? MeleeStoppingDistance
+                    : _combatStoppingDistance;
             }
         }
 

@@ -599,31 +599,35 @@ namespace Odyssey.Tests.PlayMode
                 Is.LessThan(distanceBeforeChase - 0.1f),
                 "怪物进入 Chase 后没有实际缩短与玩家的距离");
 
+            Assert.That(enemy.AttackRange, Is.EqualTo(0.85f).Within(0.01f),
+                "Chomper 攻击距离没有与双方碰撞体接触距离对齐");
             Assert.That(UnityEngine.AI.NavMesh.SamplePosition(
-                    enemy.transform.position + chaseDirection.normalized * 1.8f,
-                    out var attackPoint,
+                    enemy.transform.position + chaseDirection.normalized * 2.5f,
+                    out var stationaryPlayerPoint,
                     2f,
                     queryFilter),
                 Is.True,
-                "近战怪附近找不到用于攻击回归的玩家落点");
-            MovePlayer(player, attackPoint.position);
+                "近战怪附近找不到用于主动扑咬回归的玩家落点");
+            MovePlayer(player, stationaryPlayerPoint.position);
+            player.SetLocalInputEnabled(false);
             var healthBeforeAttack = player.CurrentHealth;
-            yield return new WaitForSeconds(0.15f);
-            Assert.That(enemy.CurrentGoal, Is.EqualTo(EnemyGoal.Attack),
-                "玩家进入攻击范围后，场景怪物没有从 Chase 切换到 Attack");
-            yield return new WaitForSeconds(0.7f);
-            Assert.That(player.CurrentHealth, Is.EqualTo(healthBeforeAttack),
-                "玩家未与怪物身体碰撞体重叠时，攻击动画或距离判断仍然造成了伤害");
+            var stationaryPlayerPosition = player.transform.position;
+            for (var frame = 0; frame < 180 && player.CurrentHealth == healthBeforeAttack; frame++)
+            {
+                yield return null;
+            }
 
-            var bodyCollider = enemy.GetComponentsInChildren<Collider>(true)
-                .First(candidate => !candidate.isTrigger && candidate.enabled);
-            MovePlayer(player, bodyCollider.bounds.center - player.transform.rotation * player.Controller.center);
-            Physics.SyncTransforms();
-            yield return new WaitForFixedUpdate();
-            yield return new WaitForFixedUpdate();
             Assert.That(player.CurrentHealth, Is.LessThan(healthBeforeAttack),
-                "玩家与怪物身体碰撞体重叠后没有立即受到接触伤害");
+                "玩家保持静止时，Chomper 没有主动追到身体碰撞体接触并造成伤害");
+            var horizontalPlayerDisplacement = Vector3.ProjectOnPlane(
+                player.transform.position - stationaryPlayerPosition,
+                Vector3.up).magnitude;
+            Assert.That(horizontalPlayerDisplacement, Is.LessThan(0.05f),
+                "主动扑咬测试期间玩家发生了输入位移，无法证明接触由怪物主动靠近产生");
+            Assert.That(agent.stoppingDistance, Is.EqualTo(0.1f).Within(0.01f),
+                "Chomper 追击仍使用旧的 1.5 米停止距离");
 
+            player.SetLocalInputEnabled(true);
             MovePlayer(player, enemy.transform.position + Vector3.forward * (enemy.ForgetRange + 3f));
             yield return new WaitForSeconds(0.25f);
             Assert.That(enemy.CurrentGoal, Is.EqualTo(EnemyGoal.Patrol),
