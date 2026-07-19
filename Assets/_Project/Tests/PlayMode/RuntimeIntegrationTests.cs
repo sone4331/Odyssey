@@ -149,8 +149,13 @@ namespace Odyssey.Tests.PlayMode
             Assert.That(freeLook, Is.Not.Null, "Level_01 缺少 FreeLook 摄像机");
             Assert.That(binder.LocalPlayer, Is.SameAs(player));
             Assert.That(freeLook.Follow, Is.Not.Null, "FreeLook 没有绑定本机 Owner");
-            Assert.That(freeLook.LookAt, Is.SameAs(freeLook.Follow));
-            Assert.That(freeLook.Follow.GetComponentInParent<PlayerController>(), Is.SameAs(player));
+            Assert.That(freeLook.Follow, Is.SameAs(player.transform),
+                "FreeLook Follow 应保持联机前语义：跟随玩家根节点");
+            Assert.That(freeLook.LookAt, Is.Not.Null);
+            Assert.That(freeLook.LookAt.name, Is.EqualTo("CamLookAtTarget"),
+                "FreeLook 错误使用了位于角色前方十米的 StrafeCamTarget");
+            Assert.That(freeLook.LookAt.GetComponentInParent<PlayerController>(), Is.SameAs(player));
+            Assert.That(freeLook.LookAt.localPosition.y, Is.EqualTo(1.5f).Within(0.01f));
             Assert.That(freeLook.GetComponent<CinemachineInputProvider>().enabled, Is.True);
             yield return null;
         }

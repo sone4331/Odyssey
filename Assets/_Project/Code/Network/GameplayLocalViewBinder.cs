@@ -69,9 +69,11 @@ namespace Odyssey.Networking
             ResolveCameraReferences();
             if (freeLookCamera != null)
             {
-                var target = FindCameraTarget(player.transform);
-                freeLookCamera.Follow = target;
-                freeLookCamera.LookAt = target;
+                // 联机前原场景的正确构图是：Follow 跟随玩家根节点，LookAt 注视胸口目标。
+                // 不能使用 3D Game Kit 的 StrafeCamTarget；该节点位于角色前方 10 米，
+                // 若同时作为 Follow/LookAt 会让镜头盯向远处地面，玩家因此偏离画面中心。
+                freeLookCamera.Follow = player.transform;
+                freeLookCamera.LookAt = FindLookAtTarget(player.transform);
                 freeLookCamera.m_XAxis.Value = 0f;
                 freeLookCamera.m_YAxis.Value = 0.5f;
                 freeLookCamera.PreviousStateIsValid = false;
@@ -159,11 +161,11 @@ namespace Odyssey.Networking
             _defaultVerticalSpeed = Mathf.Max(0.1f, freeLookCamera.m_YAxis.m_MaxSpeed);
         }
 
-        private static Transform FindCameraTarget(Transform player)
+        private static Transform FindLookAtTarget(Transform player)
         {
             foreach (var child in player.GetComponentsInChildren<Transform>(true))
             {
-                if (child.name == "StrafeCamTarget")
+                if (child.name == "CamLookAtTarget")
                 {
                     return child;
                 }
