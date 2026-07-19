@@ -19,7 +19,11 @@ namespace Odyssey.Networking
         private const float ComboContinuationWindow = 0.9f;
         private const float PositionAuditInterval = 0.2f;
         private const float PositionTolerance = 1.5f;
+        private const float ContactAuditInterval = 0.05f;
+        private const float ContactPadding = 0.08f;
+        private const float DamageInvulnerabilityDuration = 1.5f;
         private static readonly Collider[] AttackBuffer = new Collider[24];
+        private static readonly Collider[] ContactBuffer = new Collider[16];
 
         private readonly NetworkVariable<int> _health = new NetworkVariable<int>(
             1,
@@ -41,6 +45,7 @@ namespace Odyssey.Networking
         private double _nextAttackChainTime;
         private double _nextDashTime;
         private double _nextPositionAuditTime;
+        private double _nextContactAuditTime;
         private Vector3 _lastAcceptedPosition;
         private bool _respawning;
         private bool _usesNetworkGameplayAuthority;
@@ -110,7 +115,13 @@ namespace Odyssey.Networking
 
         private void Update()
         {
-            if (!IsServer || IsOwner || _respawning || NetworkManager.ServerTime.Time < _nextPositionAuditTime)
+            if (!IsServer)
+            {
+                return;
+            }
+
+            CheckEnemyContactOnHost();
+            if (IsOwner || _respawning || NetworkManager.ServerTime.Time < _nextPositionAuditTime)
             {
                 return;
             }
@@ -157,6 +168,10 @@ namespace Odyssey.Networking
 
             var previous = _health.Value;
             _health.Value = Mathf.Max(0, previous - damage);
+            // 与单机受伤后的 1.5 秒保护保持一致，避免接触检测和咬击在同一瞬间重复扣除多格生命。
+            _invulnerableUntil.Value = System.Math.Max(
+                _invulnerableUntil.Value,
+                NetworkManager.ServerTime.Time + DamageInvulnerabilityDuration);
             var applied = previous - _health.Value;
             var killed = _health.Value == 0;
             PresentDamageClientRpc(previous, _health.Value, attackerPosition, sourceId);
@@ -166,6 +181,54 @@ namespace Odyssey.Networking
             }
 
             return new DamageResult(true, applied, killed);
+        }
+
+        /// <summary>
+        /// 在 Host 上用玩家真实胶囊检测怪物接触，并直接提交权威伤害。
+        /// Owner 驱动移动时，Client 的 OnControllerColliderHit 无权修改生命；因此必须由 Host 根据复制位置复核接触，
+        /// 这样 Host 与 Client 都遵循同一规则，也不会把伤害结果交给客户端自行决定。
+        /// </summary>
+        private void CheckEnemyContactOnHost()
+        {
+            if (!_usesNetworkGameplayAuthority || _respawning || _health.Value <= 0 ||
+                _player == null || _player.Controller == null)
+            {
+                return;
+            }
+
+            var now = NetworkManager.ServerTime.Time;
+            if (now < _nextContactAuditTime)
+            {
+                return;
+            }
+
+            _nextContactAuditTime = now + ContactAuditInterval;
+            var controller = _player.Controller;
+            var center = transform.TransformPoint(controller.center);
+            var radius = controller.radius + ContactPadding;
+            var halfSegment = Mathf.Max(0f, controller.height * 0.5f - controller.radius);
+            var axis = transform.up * halfSegment;
+            var count = Physics.OverlapCapsuleNonAlloc(
+                center - axis,
+                center + axis,
+                radius,
+                ContactBuffer,
+                _player.EnemyLayer,
+                QueryTriggerInteraction.Ignore);
+
+            for (var index = 0; index < count; index++)
+            {
+                var enemy = ContactBuffer[index] == null
+                    ? null
+                    : ContactBuffer[index].GetComponentInParent<Enemy>();
+                if (enemy == null || enemy.CurrentHealth <= 0)
+                {
+                    continue;
+                }
+
+                TryTakeDamage(enemy.AttackDamage, enemy.transform.position, "enemy_contact");
+                break;
+            }
         }
 
         [ServerRpc]

@@ -117,5 +117,45 @@ namespace Odyssey.Tests.PlayMode
             Assert.That(Object.FindFirstObjectByType<EncounterClearancePressurePlate>().enabled, Is.True,
                 "Host 没有取得踏板条件判断权");
         }
+
+        [UnityTest]
+        public IEnumerator HostAuthority_ContactWithEnemyDamagesPlayerOnlyOnceDuringProtectionWindow()
+        {
+            var session = Object.FindFirstObjectByType<GameplaySessionController>();
+            Assert.That(session.StartHost(), Is.True, "Host 启动失败，无法验证接触伤害");
+            for (var frame = 0;
+                 frame < 180 && Object.FindFirstObjectByType<PlayerController>() == null;
+                 frame++)
+            {
+                yield return null;
+            }
+
+            var player = Object.FindFirstObjectByType<PlayerController>();
+            var playerAdapter = player == null ? null : player.GetComponent<NetworkPlayerAdapter>();
+            var enemy = Object.FindObjectsByType<Enemy>(FindObjectsInactive.Exclude, FindObjectsSortMode.None)
+                .First(candidate => candidate.AttackDamage > 0 && candidate.CurrentHealth > 0);
+            Assert.That(playerAdapter, Is.Not.Null);
+
+            // 关闭双方玩法更新，只保留 Collider 和 NetworkPlayerAdapter，确保扣血确实来自 Host 接触复核，
+            // 而不是本机 PlayerController.OnControllerColliderHit 或怪物行为树的咬击时序。
+            player.enabled = false;
+            enemy.enabled = false;
+            var agent = enemy.GetComponent<NavMeshAgent>();
+            if (agent != null)
+            {
+                agent.enabled = false;
+            }
+
+            player.Controller.enabled = false;
+            player.transform.position = enemy.transform.position;
+            player.Controller.enabled = true;
+            Physics.SyncTransforms();
+            var healthBeforeContact = playerAdapter.CurrentHealth;
+
+            yield return new WaitForSeconds(0.35f);
+
+            Assert.That(playerAdapter.CurrentHealth, Is.EqualTo(healthBeforeContact - enemy.AttackDamage),
+                "Host 没有结算怪物接触伤害，或保护期内发生了重复扣血");
+        }
     }
 }
