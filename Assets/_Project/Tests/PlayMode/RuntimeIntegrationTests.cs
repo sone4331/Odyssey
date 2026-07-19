@@ -117,6 +117,37 @@ namespace Odyssey.Tests.PlayMode
         }
 
         [UnityTest]
+        public IEnumerator SinglePlayer_VisualEnemyContactDamagesWithoutWaitingForBehaviorAttack()
+        {
+            var player = Object.FindFirstObjectByType<PlayerController>();
+            var enemies = Object.FindObjectsByType<Enemy>(FindObjectsInactive.Exclude, FindObjectsSortMode.None);
+            var enemy = enemies.First(candidate => candidate.AttackDamage > 0 && candidate.CurrentHealth > 0);
+            foreach (var candidate in enemies)
+            {
+                candidate.enabled = false;
+                var navigation = candidate.GetComponent<UnityEngine.AI.NavMeshAgent>();
+                if (navigation != null)
+                {
+                    navigation.enabled = false;
+                }
+            }
+
+            player.SetHealth(player.MaxHealth, "单机视觉接触测试");
+            player.Controller.enabled = false;
+            // Chomper 渲染模型的前后半径约 0.81 米，而物理 BoxCollider 只有约 0.42 米。
+            // 0.95 米处已经发生明显模型重叠，但原 OnControllerColliderHit 尚不会触发。
+            player.transform.position = enemy.transform.position + enemy.transform.forward * 0.95f;
+            player.Controller.enabled = true;
+            Physics.SyncTransforms();
+            var healthBeforeContact = player.CurrentHealth;
+
+            yield return new WaitForSeconds(0.25f);
+
+            Assert.That(player.CurrentHealth, Is.EqualTo(healthBeforeContact - enemy.AttackDamage),
+                "单机视觉重叠后仍在等待行为树攻击前摇，没有立即结算接触伤害");
+        }
+
+        [UnityTest]
         public IEnumerator EscapeMenu_AtomicallyUpdatesLocalInputAndTimeScale()
         {
             var menu = Object.FindFirstObjectByType<GameMenuController>();

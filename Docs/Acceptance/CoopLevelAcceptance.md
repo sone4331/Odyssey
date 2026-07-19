@@ -66,7 +66,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\Tools\Tests\RunHumanReadab
 在 Unity Test Runner 中执行：
 
 - EditMode：31 项全部通过。
-- PlayMode：22 项全部通过。
+- PlayMode：24 项全部通过。
 
 网络相关测试会验证合作玩家和投射物 Prefab、六只怪物、两个战区、一个门禁、IPv4 校验、攻击拒绝原因、连击段次，以及真实 Host 启动后的 Owner、行为树和 NavMesh 生命周期。
 

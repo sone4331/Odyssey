@@ -20,7 +20,7 @@ namespace Odyssey.Networking
         private const float PositionAuditInterval = 0.2f;
         private const float PositionTolerance = 1.5f;
         private const float ContactAuditInterval = 0.05f;
-        private const float ContactPadding = 0.08f;
+        private const float ContactPadding = 0.2f;
         private const float DamageInvulnerabilityDuration = 1.5f;
         private static readonly Collider[] AttackBuffer = new Collider[24];
         private static readonly Collider[] ContactBuffer = new Collider[16];

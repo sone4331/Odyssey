@@ -6,6 +6,7 @@ using Odyssey.Gameplay.Combat;
 using Odyssey.Gameplay.Config;
 using Odyssey.Inputs;
 using Odyssey.Unity.Config;
+using Odyssey.Characters.Enemies;
 using UnityEngine;
 using UnityEngine.Serialization;
 
@@ -22,6 +23,9 @@ namespace Odyssey.Characters.Player
         public const string AttackAbilityId = PlayerRuntimeSystems.AttackAbilityId;
         public const string DashAbilityId = PlayerRuntimeSystems.DashAbilityId;
         public const string HitAbilityId = PlayerRuntimeSystems.HitAbilityId;
+        private const float ContactAuditInterval = 0.05f;
+        private const float ContactPadding = 0.2f;
+        private static readonly Collider[] ContactBuffer = new Collider[16];
 
         [Header("配置")]
         [SerializeField] private string configId = "player";
@@ -86,6 +90,7 @@ namespace Odyssey.Characters.Player
         private bool _isDead;
         private bool _started;
         private bool _localInputEnabled = true;
+        private float _nextContactAuditTime;
 
         public CharacterController Controller { get; private set; }
         public Animator Animator { get; private set; }
@@ -169,7 +174,13 @@ namespace Odyssey.Characters.Player
 
         private void Update()
         {
-            if (!_started || _isDead || !_localInputEnabled)
+            if (!_started || _isDead)
+            {
+                return;
+            }
+
+            CheckEnemyContactLocally();
+            if (!_localInputEnabled)
             {
                 return;
             }
@@ -203,6 +214,45 @@ namespace Odyssey.Characters.Player
             if (other.CompareTag("Acid"))
             {
                 TryTakeDamage(1, transform.position, "acid");
+            }
+        }
+
+        /// <summary>
+        /// 在单机模式主动检测怪物与玩家胶囊的视觉接触，不再依赖玩家移动时才触发的 OnControllerColliderHit。
+        /// 联机模式由 NetworkPlayerAdapter 在 Host 上执行同类复核，因此本方法发现外部生命权威后立即退出，避免双重结算。
+        /// </summary>
+        private void CheckEnemyContactLocally()
+        {
+            if (_externalDamageAuthority != null || Controller == null || Time.time < _nextContactAuditTime)
+            {
+                return;
+            }
+
+            _nextContactAuditTime = Time.time + ContactAuditInterval;
+            var center = transform.TransformPoint(Controller.center);
+            var radius = Controller.radius + ContactPadding;
+            var halfSegment = Mathf.Max(0f, Controller.height * 0.5f - Controller.radius);
+            var axis = transform.up * halfSegment;
+            var count = Physics.OverlapCapsuleNonAlloc(
+                center - axis,
+                center + axis,
+                radius,
+                ContactBuffer,
+                EnemyLayer,
+                QueryTriggerInteraction.Ignore);
+
+            for (var index = 0; index < count; index++)
+            {
+                var enemy = ContactBuffer[index] == null
+                    ? null
+                    : ContactBuffer[index].GetComponentInParent<Enemy>();
+                if (enemy == null || enemy.CurrentHealth <= 0)
+                {
+                    continue;
+                }
+
+                TryTakeDamage(enemy.AttackDamage, enemy.transform.position, "enemy_contact");
+                break;
             }
         }
 
