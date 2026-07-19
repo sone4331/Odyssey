@@ -99,5 +99,41 @@ namespace Odyssey.Encounters
                 EncounterCompleted?.Invoke();
             }
         }
+
+        /// <summary>
+        /// 在 Client 应用 Host 的遭遇快照，并重新发布原有事件供 HUD 与门禁表现订阅。
+        /// 权威端仍只通过真实 Enemy.Defeated 推进状态，避免客户端伪造完成结果。
+        /// </summary>
+        public bool ApplyAuthoritativeSnapshot(CombatEncounterState state, int remainingEnemies)
+        {
+            if (_progress == null)
+            {
+                return false;
+            }
+
+            var previousState = _progress.State;
+            var previousRemaining = _progress.RemainingEnemies;
+            if (!_progress.ApplySnapshot(state, remainingEnemies))
+            {
+                return false;
+            }
+
+            if (previousState == CombatEncounterState.Waiting && state >= CombatEncounterState.Active)
+            {
+                EncounterStarted?.Invoke();
+            }
+
+            for (var count = previousRemaining; count > remainingEnemies; count--)
+            {
+                EnemyDefeated?.Invoke(null);
+            }
+
+            if (previousState != CombatEncounterState.Completed && state == CombatEncounterState.Completed)
+            {
+                EncounterCompleted?.Invoke();
+            }
+
+            return true;
+        }
     }
 }

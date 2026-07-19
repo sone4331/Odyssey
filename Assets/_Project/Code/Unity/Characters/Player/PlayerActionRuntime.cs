@@ -207,10 +207,8 @@ namespace Odyssey.Characters.Player
 
         private sealed class AttackState : ActionState
         {
-            private static readonly Collider[] HitBuffer = new Collider[16];
             private static readonly float[] ComboCommitTimes = { 0.38f, 0.34f, 0.41f, 1f };
             private static readonly float[] RecoveryTimes = { 0.65f, 0.65f, 0.65f, 0.72f };
-            private readonly HashSet<Enemy> _damagedEnemies = new HashSet<Enemy>();
             private int _comboIndex;
             private bool _comboQueued;
             private bool _damageWindowOpen;
@@ -228,6 +226,11 @@ namespace Odyssey.Characters.Player
 
             public void SetDamageWindow(bool isOpen)
             {
+                if (isOpen && !_damageWindowOpen)
+                {
+                    Player.ResolveAttackWindow(_comboIndex);
+                }
+
                 _damageWindowOpen = isOpen;
             }
 
@@ -237,7 +240,6 @@ namespace Odyssey.Characters.Player
                 _comboIndex = 1;
                 _comboQueued = false;
                 _damageWindowOpen = false;
-                _damagedEnemies.Clear();
                 _timer = 0f;
                 Player.VerticalVelocity = 0f;
                 Player.Controller.Move(Vector3.zero);
@@ -275,11 +277,6 @@ namespace Odyssey.Characters.Player
                     _targetFacing,
                     720f * deltaTime);
 
-                if (_damageWindowOpen)
-                {
-                    ApplyDamage();
-                }
-
                 var info = Player.Animator.GetCurrentAnimatorStateInfo(0);
                 var normalizedTime = _timer < 0.15f
                     ? 0f
@@ -290,7 +287,6 @@ namespace Odyssey.Characters.Player
                     _comboIndex++;
                     _comboQueued = false;
                     _damageWindowOpen = false;
-                    _damagedEnemies.Clear();
                     _timer = 0f;
                     Player.Animation.PlayAttack(_comboIndex);
                     return StateTransition<PlayerActionStateId>.None;
@@ -299,25 +295,6 @@ namespace Odyssey.Characters.Player
                 return normalizedTime >= RecoveryTimes[comboSlot]
                     ? StateTransition<PlayerActionStateId>.To(PlayerActionStateId.Free)
                     : StateTransition<PlayerActionStateId>.None;
-            }
-
-            private void ApplyDamage()
-            {
-                var center = Player.transform.position + Player.transform.forward + Vector3.up * 0.5f;
-                var count = Physics.OverlapSphereNonAlloc(
-                    center,
-                    Player.AttackRange,
-                    HitBuffer,
-                    Player.EnemyLayer,
-                    QueryTriggerInteraction.Ignore);
-                for (var i = 0; i < count; i++)
-                {
-                    var enemy = HitBuffer[i].GetComponentInParent<Enemy>();
-                    if (enemy != null && _damagedEnemies.Add(enemy))
-                    {
-                        enemy.TakeDamage(Player.AttackDamage);
-                    }
-                }
             }
 
             private void CaptureTargetFacing()
@@ -336,6 +313,31 @@ namespace Odyssey.Characters.Player
                 else
                 {
                     _targetFacing = Player.transform.rotation;
+                }
+            }
+        }
+
+        private static readonly Collider[] LocalHitBuffer = new Collider[16];
+
+        /// <summary>
+        /// 保留单机模式的一次性范围伤害策略；联机模式不会调用本方法，而是在同一动画窗口向 Host 提交命令。
+        /// </summary>
+        internal static void ResolveLocalAttack(PlayerController player)
+        {
+            var center = player.transform.position + player.transform.forward + Vector3.up * 0.5f;
+            var count = Physics.OverlapSphereNonAlloc(
+                center,
+                player.AttackRange,
+                LocalHitBuffer,
+                player.EnemyLayer,
+                QueryTriggerInteraction.Ignore);
+            var damaged = new HashSet<Enemy>();
+            for (var i = 0; i < count; i++)
+            {
+                var enemy = LocalHitBuffer[i].GetComponentInParent<Enemy>();
+                if (enemy != null && damaged.Add(enemy))
+                {
+                    enemy.TakeDamage(player.AttackDamage);
                 }
             }
         }

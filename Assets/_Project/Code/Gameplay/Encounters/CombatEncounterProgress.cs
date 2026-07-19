@@ -59,5 +59,25 @@ namespace Odyssey.Gameplay.Encounters
 
             return true;
         }
+
+        /// <summary>
+        /// 在非权威客户端应用 Host 快照；只接受合法范围和单向阶段推进，避免网络旧包让遭遇倒退。
+        /// </summary>
+        public bool ApplySnapshot(CombatEncounterState state, int remainingEnemies)
+        {
+            if (state < State || remainingEnemies < 0 || remainingEnemies > TotalEnemies)
+            {
+                return false;
+            }
+
+            if (state == CombatEncounterState.Completed && remainingEnemies != 0)
+            {
+                return false;
+            }
+
+            State = state;
+            RemainingEnemies = remainingEnemies;
+            return true;
+        }
     }
 }

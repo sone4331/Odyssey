@@ -15,6 +15,7 @@ namespace Odyssey.Characters.Enemies
         private readonly Transform _owner;
         private PlayerController _targetPlayer;
         private bool _hasSensedTarget;
+        private float _nextTargetRefreshTime;
 
         public EnemyPerception(Transform owner)
         {
@@ -43,7 +44,7 @@ namespace Odyssey.Characters.Enemies
         {
             ResolveTarget();
             var playerAvailable = _targetPlayer != null &&
-                                  _targetPlayer.isActiveAndEnabled &&
+                                  _targetPlayer.gameObject.activeInHierarchy &&
                                   _targetPlayer.CurrentHealth > 0;
             var distance = playerAvailable
                 ? Vector3.ProjectOnPlane(_owner.position - _targetPlayer.transform.position, Vector3.up).magnitude
@@ -84,14 +85,41 @@ namespace Odyssey.Characters.Enemies
 
         private void ResolveTarget()
         {
-            if (_targetPlayer != null && _targetPlayer.gameObject.activeInHierarchy)
+            if (Time.time < _nextTargetRefreshTime &&
+                _targetPlayer != null &&
+                _targetPlayer.gameObject.activeInHierarchy &&
+                _targetPlayer.CurrentHealth > 0)
             {
                 return;
             }
 
-            var player = GameObject.FindGameObjectWithTag("Player");
-            _targetPlayer = player == null ? null : player.GetComponentInParent<PlayerController>();
-            _hasSensedTarget = false;
+            _nextTargetRefreshTime = Time.time + 0.2f;
+            var previous = _targetPlayer;
+            _targetPlayer = null;
+            var nearestDistance = float.PositiveInfinity;
+            foreach (var candidate in Object.FindObjectsByType<PlayerController>(
+                         FindObjectsInactive.Exclude,
+                         FindObjectsSortMode.None))
+            {
+                if (candidate == null || candidate.CurrentHealth <= 0)
+                {
+                    continue;
+                }
+
+                var distance = Vector3.SqrMagnitude(candidate.transform.position - _owner.position);
+                if (distance >= nearestDistance)
+                {
+                    continue;
+                }
+
+                nearestDistance = distance;
+                _targetPlayer = candidate;
+            }
+
+            if (_targetPlayer != previous)
+            {
+                _hasSensedTarget = false;
+            }
         }
     }
 }

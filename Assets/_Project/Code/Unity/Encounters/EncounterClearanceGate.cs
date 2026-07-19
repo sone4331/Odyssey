@@ -24,6 +24,7 @@ namespace Odyssey.Encounters
         public Vector3 CurrentMovingPartLocalPosition => movingPart == null
             ? Vector3.zero
             : movingPart.localPosition;
+        public event System.Action OpeningStarted;
 
         private void Awake()
         {
@@ -75,6 +76,7 @@ namespace Odyssey.Encounters
             _elapsed = 0f;
             IsOpening = true;
             audioSource?.Play();
+            OpeningStarted?.Invoke();
             return true;
         }
     }

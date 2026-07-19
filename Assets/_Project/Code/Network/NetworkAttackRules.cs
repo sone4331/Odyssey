@@ -13,7 +13,8 @@ namespace Odyssey.Networking
         AttackerDead,
         Cooldown,
         NoTarget,
-        OutOfRange
+        OutOfRange,
+        InvalidCombo
     }
 
     /// <summary>
@@ -92,6 +93,8 @@ namespace Odyssey.Networking
                     return "前方没有目标";
                 case NetworkAttackRejection.OutOfRange:
                     return "目标超出攻击距离";
+                case NetworkAttackRejection.InvalidCombo:
+                    return "连击段次或时序非法";
                 default:
                     return "未知拒绝原因";
             }
@@ -100,6 +103,50 @@ namespace Odyssey.Networking
         private static NetworkAttackDecision Reject(NetworkAttackRejection reason)
         {
             return new NetworkAttackDecision(false, reason);
+        }
+    }
+
+    /// <summary>
+    /// 维护 Host 期望收到的下一段连击与续接截止时间，拒绝跳段、倒序和超时命令。
+    /// 采用小型状态验证器把安全关键的时序规则从 RPC 方法中分离，便于独立测试且不会扩展成通用连击框架。
+    /// </summary>
+    public sealed class NetworkComboSequenceValidator
+    {
+        private readonly double _continuationWindow;
+        private int _expectedComboIndex = 1;
+        private double _expiresAt;
+
+        public NetworkComboSequenceValidator(double continuationWindow)
+        {
+            _continuationWindow = System.Math.Max(0.01d, continuationWindow);
+        }
+
+        public int ExpectedComboIndex => _expectedComboIndex;
+
+        public bool TryAdvance(int comboIndex, double serverTime)
+        {
+            if (comboIndex == 1)
+            {
+                _expectedComboIndex = 2;
+                _expiresAt = serverTime + _continuationWindow;
+                return true;
+            }
+
+            if (comboIndex != _expectedComboIndex || serverTime > _expiresAt || comboIndex < 2 || comboIndex > 4)
+            {
+                Reset();
+                return false;
+            }
+
+            _expectedComboIndex = comboIndex == 4 ? 1 : comboIndex + 1;
+            _expiresAt = serverTime + _continuationWindow;
+            return true;
+        }
+
+        public void Reset()
+        {
+            _expectedComboIndex = 1;
+            _expiresAt = 0d;
         }
     }
 }

@@ -106,5 +106,22 @@ namespace Odyssey.Encounters
                 audioSource.PlayOneShot(clip);
             }
         }
+
+        /// <summary>
+        /// 在本机 Owner 生成后更新闪避反馈来源，避免场景表现组件持有已删除的预放置玩家。
+        /// </summary>
+        public void BindPlayer(PlayerController runtimePlayer)
+        {
+            if (player != null)
+            {
+                player.DamageEvaded -= HandleDamageEvaded;
+            }
+
+            player = runtimePlayer;
+            if (isActiveAndEnabled && player != null)
+            {
+                player.DamageEvaded += HandleDamageEvaded;
+            }
+        }
     }
 }

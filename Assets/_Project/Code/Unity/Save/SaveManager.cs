@@ -23,6 +23,8 @@ namespace Odyssey.Systems
 
         private PauseRuntime _pause;
         private PlayerSaveRuntime _playerSave;
+        private bool _multiplayerMode;
+        private bool _localMenuVisible;
 
         private void Awake()
         {
@@ -35,6 +37,11 @@ namespace Odyssey.Systems
         /// </summary>
         public void Configure(ISaveService<PlayerSaveData> saveService)
         {
+            if (player == null)
+            {
+                return;
+            }
+
             _playerSave = new PlayerSaveRuntime(
                 player,
                 saveService ?? throw new System.ArgumentNullException(nameof(saveService)));
@@ -46,7 +53,14 @@ namespace Odyssey.Systems
             if (keyboard != null &&
                 (keyboard.pKey.wasPressedThisFrame || keyboard.escapeKey.wasPressedThisFrame))
             {
-                _pause.SetPaused(!_pause.IsPaused);
+                if (_multiplayerMode)
+                {
+                    SetLocalMultiplayerMenu(!_localMenuVisible);
+                }
+                else
+                {
+                    _pause.SetPaused(!_pause.IsPaused);
+                }
             }
         }
 
@@ -55,11 +69,36 @@ namespace Odyssey.Systems
             _pause?.Dispose();
         }
 
-        public void PauseGame() => _pause.SetPaused(true);
-        public void ResumeGame() => _pause.SetPaused(false);
+        public void PauseGame()
+        {
+            if (_multiplayerMode)
+            {
+                SetLocalMultiplayerMenu(true);
+                return;
+            }
+
+            _pause.SetPaused(true);
+        }
+
+        public void ResumeGame()
+        {
+            if (_multiplayerMode)
+            {
+                SetLocalMultiplayerMenu(false);
+                return;
+            }
+
+            _pause.SetPaused(false);
+        }
 
         public void SaveGame()
         {
+            if (_multiplayerMode)
+            {
+                Debug.LogWarning("联机模式由 Host 维护关卡状态，不支持本地存档。", this);
+                return;
+            }
+
             if (_playerSave == null)
             {
                 Debug.LogError("保存失败：场景尚未注入存档服务。", this);
@@ -75,6 +114,12 @@ namespace Odyssey.Systems
 
         public void LoadGame()
         {
+            if (_multiplayerMode)
+            {
+                Debug.LogWarning("联机模式不能读取单机快照，以免覆盖权威状态。", this);
+                return;
+            }
+
             if (_playerSave == null)
             {
                 Debug.LogError("读取失败：场景尚未注入存档服务。", this);
@@ -99,6 +144,38 @@ namespace Odyssey.Systems
 #else
             Application.Quit();
 #endif
+        }
+
+        /// <summary>
+        /// 在运行时玩家生成后更新存档目标；单机模式据此恢复原快照能力，联机模式只保留菜单门面。
+        /// </summary>
+        public void BindPlayer(PlayerController runtimePlayer, ISaveService<PlayerSaveData> saveService)
+        {
+            player = runtimePlayer;
+            Configure(saveService);
+        }
+
+        /// <summary>
+        /// 切换本地菜单规则；联机菜单不修改 Time.timeScale，避免一端暂停造成网络模拟分叉。
+        /// </summary>
+        public void SetMultiplayerMode(bool multiplayer)
+        {
+            _multiplayerMode = multiplayer;
+            Time.timeScale = 1f;
+            _pause.SetPaused(false);
+            SetLocalMultiplayerMenu(false);
+        }
+
+        private void SetLocalMultiplayerMenu(bool visible)
+        {
+            _localMenuVisible = visible;
+            if (pauseMenuPanel != null)
+            {
+                pauseMenuPanel.SetActive(visible);
+            }
+
+            Cursor.lockState = visible ? CursorLockMode.None : CursorLockMode.Locked;
+            Cursor.visible = visible;
         }
 
     }

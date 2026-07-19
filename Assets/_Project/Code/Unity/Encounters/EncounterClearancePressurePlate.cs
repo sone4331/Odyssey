@@ -16,7 +16,6 @@ namespace Odyssey.Encounters
         [SerializeField] private Collider triggerVolume;
 
         private readonly HashSet<PlayerController> _playersInside = new HashSet<PlayerController>();
-        private PlayerController _player;
         private bool _completionRequiresExit;
         private bool _freshEntryArmed;
 
@@ -41,7 +40,6 @@ namespace Odyssey.Encounters
             }
 
             triggerVolume ??= GetComponent<Collider>();
-            _player = FindFirstObjectByType<PlayerController>();
             encounter.EncounterCompleted += HandleEncounterCompleted;
         }
 
@@ -163,15 +161,30 @@ namespace Odyssey.Encounters
 
         private bool IsPlayerInsideTrigger()
         {
-            if (_player == null || triggerVolume == null || !_player.gameObject.activeInHierarchy)
+            if (triggerVolume == null)
             {
                 return false;
             }
 
-            var playerBounds = _player.Controller == null
-                ? new Bounds(_player.transform.position, Vector3.one * 0.1f)
-                : _player.Controller.bounds;
-            return triggerVolume.bounds.Intersects(playerBounds);
+            foreach (var player in FindObjectsByType<PlayerController>(
+                         FindObjectsInactive.Exclude,
+                         FindObjectsSortMode.None))
+            {
+                if (player == null || player.CurrentHealth <= 0)
+                {
+                    continue;
+                }
+
+                var playerBounds = player.Controller == null
+                    ? new Bounds(player.transform.position, Vector3.one * 0.1f)
+                    : player.Controller.bounds;
+                if (triggerVolume.bounds.Intersects(playerBounds))
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
     }
 }

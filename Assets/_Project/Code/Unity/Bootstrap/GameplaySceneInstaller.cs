@@ -14,6 +14,7 @@ namespace Odyssey.Bootstrap
     public sealed class GameplaySceneInstaller : MonoBehaviour
     {
         private ApplicationContext _context;
+        public ApplicationContext Context => _context;
 
         /// <summary>
         /// 使用应用上下文完成一次性场景装配。重复传入同一上下文保持幂等，传入不同上下文则快速失败以暴露生命周期错误。
@@ -62,6 +63,19 @@ namespace Odyssey.Bootstrap
                     saveManager.Configure(_context.SaveService);
                 }
             }
+        }
+
+        /// <summary>
+        /// 为 NGO 在场景启动后生成的玩家补做配置和存档装配；仍由场景 Composition Root 持有应用服务。
+        /// </summary>
+        public void InstallRuntimePlayer(PlayerController player)
+        {
+            if (_context == null || player == null)
+            {
+                return;
+            }
+
+            GameConfigBinder.Bind(_context.Configs, player.ConfigId, player);
         }
     }
 }

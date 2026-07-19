@@ -12,17 +12,17 @@ namespace Odyssey.Characters.Player
     public class PlayerHealthUI : MonoBehaviour, IHealthDisplayView
     {
         [Header("引用")]
-        public PlayerController Player; 
-        public Image[] HealthIcons; 
+        public PlayerController Player;
+        public Image[] HealthIcons;
 
         [Header("Sprites (满血/空血图片)")]
         public Sprite FullHealthSprite;  // 存放亮的彩色水晶
         public Sprite EmptyHealthSprite; // 存放暗的灰色水晶
 
         [Header("受伤闪屏效果")]
-        public Image DamageFlashImage; 
+        public Image DamageFlashImage;
         public Color FlashColor = new Color(1f, 0f, 0f, 0.4f); // 默认半透明红
-        public float FlashSpeed = 5f; 
+        public float FlashSpeed = 5f;
 
         private PlayerController _boundPlayer;
         private HealthDisplayPresenter _presenter;
@@ -88,6 +88,15 @@ namespace Odyssey.Characters.Player
             _boundPlayer.HealthChanged += OnHealthChanged;
             _boundPlayer.RuntimeConfigured += OnRuntimeConfigured;
             _presenter.Initialize(_boundPlayer.CurrentHealth);
+        }
+
+        /// <summary>
+        /// 由场景会话在本机 Owner 生成后重新绑定血量来源，使同一个 HUD 不依赖预放置玩家。
+        /// </summary>
+        public void Bind(PlayerController player)
+        {
+            Player = player;
+            BindPlayer();
         }
 
         private void UnbindPlayer()

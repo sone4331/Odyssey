@@ -71,6 +71,8 @@ namespace Odyssey.Characters.Enemies
         /// </summary>
         public event Action<Enemy> Defeated;
         public event Action<Enemy, DamageResult> Damaged;
+        public event Action<GameObject> ProjectileCreated;
+        public bool UsesExternalDespawn { get; set; }
 
         private void Awake()
         {
@@ -348,7 +350,10 @@ namespace Odyssey.Characters.Enemies
 
             Defeated?.Invoke(this);
 
-            Destroy(gameObject, 2f);
+            if (!UsesExternalDespawn)
+            {
+                Destroy(gameObject, 2f);
+            }
         }
 
         /// <summary>
@@ -385,6 +390,15 @@ namespace Odyssey.Characters.Enemies
             }
 
             projectile.Initialize(this, direction.normalized, _projectileSpeed, AttackDamage);
+            ProjectileCreated?.Invoke(instance);
+        }
+
+        /// <summary>
+        /// 在 Client 根据 Host 已确认结果重放命中特效事件，不修改本地怪物生命或行为树状态。
+        /// </summary>
+        public void PresentReplicatedDamage(int appliedAmount, bool killed)
+        {
+            Damaged?.Invoke(this, new DamageResult(appliedAmount > 0, appliedAmount, killed));
         }
 
         private void SetAttackTelegraph(bool visible)

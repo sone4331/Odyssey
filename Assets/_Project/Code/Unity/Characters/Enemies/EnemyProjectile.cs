@@ -1,4 +1,5 @@
 using Odyssey.Characters.Player;
+using System;
 using UnityEngine;
 
 namespace Odyssey.Characters.Enemies
@@ -23,6 +24,8 @@ namespace Odyssey.Characters.Enemies
 
         public bool IsInitialized => _initialized;
         public bool IsResolved => _resolved;
+        public bool UsesExternalDespawn { get; set; }
+        public event Action<EnemyProjectile> Resolved;
 
         /// <summary>
         /// 由发射者一次性提交不可变飞行参数，投射物不会在后续帧追踪目标或读取敌人配置。
@@ -114,7 +117,11 @@ namespace Odyssey.Characters.Enemies
             }
 
             _resolved = true;
-            Destroy(gameObject);
+            Resolved?.Invoke(this);
+            if (!UsesExternalDespawn)
+            {
+                Destroy(gameObject);
+            }
         }
     }
 }

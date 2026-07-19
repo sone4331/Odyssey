@@ -81,6 +81,8 @@ namespace Odyssey.Characters.Player
         private PlayerConfigData _appliedConfig;
         private PlayerLocomotionRuntime _locomotion;
         private PlayerActionRuntime _actions;
+        private IPlayerAttackResolver _attackResolver;
+        private IExternalPlayerDamageAuthority _externalDamageAuthority;
         private bool _isDead;
         private bool _started;
 
@@ -91,7 +93,9 @@ namespace Odyssey.Characters.Player
         public bool MovementEnabled { get; set; }
         public int MaxHealth => maxHealth;
         public string ConfigId => configId;
-        public int CurrentHealth => _runtime?.Health.Current ?? Mathf.Clamp(startingHealth, 0, maxHealth);
+        public int CurrentHealth => _externalDamageAuthority?.CurrentHealth ??
+                                    _runtime?.Health.Current ??
+                                    Mathf.Clamp(startingHealth, 0, maxHealth);
         public IAbilitySystem Abilities => _runtime?.Abilities;
         public PlayerLocomotionStateId LocomotionState => _locomotion?.CurrentStateId ?? PlayerLocomotionStateId.Grounded;
         public PlayerActionStateId ActionState => _actions?.CurrentStateId ?? PlayerActionStateId.Free;
@@ -99,17 +103,30 @@ namespace Odyssey.Characters.Player
         public Vector3 DesiredMoveDirection => _locomotion?.DesiredMoveDirection ?? Vector3.zero;
         public float GroundSlopeAngle => _locomotion?.GroundSlopeAngle ?? 0f;
         public bool WallClearanceActive => _locomotion?.WallClearanceActive ?? false;
-        public bool IsDamageImmune => IsInvincible ||
-                                      (Abilities?.Tags.Has(PlayerRuntimeSystems.InvulnerableTag) ?? false);
+        public bool IsDamageImmune => _externalDamageAuthority?.IsDamageImmune ??
+                                      (IsInvincible ||
+                                       (Abilities?.Tags.Has(PlayerRuntimeSystems.InvulnerableTag) ?? false));
 
         public event Action<HealthChanged> HealthChanged;
         public event Action RuntimeConfigured;
         public event Action<DamageRequest> DamageEvaded;
+        public event Action DashAuthorityRequested;
 
         private void Awake()
         {
             Controller = GetComponent<CharacterController>();
-            Animator = GetComponentInChildren<Animator>();
+            Animator = GetComponent<Animator>();
+            if (Animator == null || Animator.runtimeAnimatorController == null)
+            {
+                foreach (var candidate in GetComponentsInChildren<Animator>(true))
+                {
+                    if (candidate.runtimeAnimatorController != null)
+                    {
+                        Animator = candidate;
+                        break;
+                    }
+                }
+            }
             if (Animator == null)
             {
                 throw new InvalidOperationException("玩家对象缺少 Animator，无法驱动角色表现。");
@@ -216,6 +233,11 @@ namespace Odyssey.Characters.Player
         /// </summary>
         public DamageResult TryTakeDamage(int damage, Vector3 attackerPosition, string sourceId)
         {
+            if (_externalDamageAuthority != null)
+            {
+                return _externalDamageAuthority.TryTakeDamage(damage, attackerPosition, sourceId);
+            }
+
             var request = new DamageRequest(damage, sourceId);
             if (_isDead || _runtime == null)
             {
@@ -324,6 +346,106 @@ namespace Odyssey.Characters.Player
         }
 
         /// <summary>
+        /// 由场景组合根或网络适配器替换攻击结算策略；传入 null 恢复单机物理命中。
+        /// 该入口只改变“谁提交结果”，不会改变连击状态、动画事件或 Ability 冷却。
+        /// </summary>
+        public void SetAttackResolver(IPlayerAttackResolver resolver)
+        {
+            _attackResolver = resolver;
+        }
+
+        /// <summary>
+        /// 注入外部生命权威；联机模式由 Host 适配器实现，单机模式保持 null 并继续使用本地 Health。
+        /// </summary>
+        public void SetExternalDamageAuthority(IExternalPlayerDamageAuthority authority)
+        {
+            _externalDamageAuthority = authority;
+        }
+
+        /// <summary>
+        /// 把动画命中窗口交给已注入策略；没有外部策略时执行现有单机范围查询。
+        /// </summary>
+        internal void ResolveAttackWindow(int comboIndex)
+        {
+            if (_attackResolver != null)
+            {
+                _attackResolver.Resolve(this, comboIndex);
+                return;
+            }
+
+            PlayerActionRuntime.ResolveLocalAttack(this);
+        }
+
+        /// <summary>
+        /// 根据 Host 已确认的生命变化播放本地表现并发布 UI 事件，不在客户端重新计算伤害。
+        /// 只有 Owner 执行受击状态机和击退；远端角色的动作由 NetworkAnimator 复制。
+        /// </summary>
+        public void PresentAuthoritativeDamage(
+            int previousHealth,
+            int currentHealth,
+            Vector3 attackerPosition,
+            string sourceId,
+            bool isLocalOwner)
+        {
+            HealthChanged?.Invoke(new HealthChanged(previousHealth, currentHealth, sourceId));
+            if (currentHealth <= 0)
+            {
+                _isDead = true;
+                MovementEnabled = false;
+                Animation.PlayDeath();
+                // 死亡后直接停用玩法控制器，与单机复活流程保持同一生命周期语义。
+                // Animator 和网络同步组件仍然独立运行，因此死亡表现与远端复制不会被中断。
+                enabled = false;
+                return;
+            }
+
+            if (!isLocalOwner || currentHealth >= previousHealth || _actions == null)
+            {
+                return;
+            }
+
+            var knockbackDirection = Vector3.ProjectOnPlane(transform.position - attackerPosition, Vector3.up).normalized;
+            if (knockbackDirection != Vector3.zero)
+            {
+                transform.forward = -knockbackDirection;
+            }
+
+            VerticalVelocity = 5f;
+            if (TryActivateAbility(HitAbilityId))
+            {
+                _actions.RequestHit(knockbackDirection * 12f);
+            }
+        }
+
+        /// <summary>
+        /// 应用 Host 下发的复活结果；只有 Owner 改写位置，所有副本都恢复生命事件与动画表现。
+        /// </summary>
+        public void PresentAuthoritativeRespawn(Vector3 position, int restoredHealth, bool isLocalOwner)
+        {
+            _isDead = false;
+            MovementEnabled = isLocalOwner;
+            VerticalVelocity = 0f;
+            if (isLocalOwner && Controller != null)
+            {
+                Controller.enabled = false;
+                transform.position = position;
+                Controller.enabled = true;
+                _actions?.Reset();
+                _locomotion?.Reset();
+            }
+
+            Animation.PlayGrounded();
+            HealthChanged?.Invoke(new HealthChanged(0, restoredHealth, "respawn"));
+            // 仅本机 Owner 恢复输入和玩法更新；远端副本继续只由网络表现组件驱动。
+            enabled = isLocalOwner;
+        }
+
+        public void PresentAuthoritativeEvade(DamageRequest request)
+        {
+            DamageEvaded?.Invoke(request);
+        }
+
+        /// <summary>
         /// 应用导表后的玩家配置，并在重建领域运行时时保留当前生命。
         /// 配置层只更新数值，不创建场景对象或控制 UI，保持数据管线与表现层解耦。
         /// </summary>
@@ -389,7 +511,10 @@ namespace Odyssey.Characters.Player
                 return;
             }
 
-            _actions.RequestDash();
+            if (_actions.RequestDash())
+            {
+                DashAuthorityRequested?.Invoke();
+            }
         }
 
         private PlayerConfigData CreateInspectorConfig()

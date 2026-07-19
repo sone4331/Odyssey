@@ -3,10 +3,12 @@
   "rootNamespace": "Odyssey.Networking",
   "references": [
     "Odyssey.Gameplay",
+    "Odyssey.Unity",
     "Unity.Netcode.Runtime",
     "Unity.Netcode.Components",
     "Unity.Networking.Transport",
-    "Unity.InputSystem"
+    "Unity.InputSystem",
+    "Cinemachine"
   ],
   "includePlatforms": [],
   "excludePlatforms": [],
