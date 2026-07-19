@@ -1,21 +1,14 @@
 {
-  "name": "Odyssey.Editor",
-  "rootNamespace": "Odyssey.Editor",
+  "name": "Odyssey.Network",
+  "rootNamespace": "Odyssey.Networking",
   "references": [
-    "Odyssey.Core",
     "Odyssey.Gameplay",
-    "Odyssey.Unity",
-    "Odyssey.Network",
     "Unity.Netcode.Runtime",
     "Unity.Netcode.Components",
     "Unity.Networking.Transport",
-    "Cinemachine",
-    "UnityEngine.TestRunner",
-    "UnityEditor.TestRunner"
+    "Unity.InputSystem"
   ],
-  "includePlatforms": [
-    "Editor"
-  ],
+  "includePlatforms": [],
   "excludePlatforms": [],
   "allowUnsafeCode": false,
   "overrideReferences": false,

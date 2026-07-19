@@ -5,6 +5,9 @@
     "Odyssey.Core",
     "Odyssey.Gameplay",
     "Odyssey.Unity",
+    "Odyssey.Network",
+    "Unity.Netcode.Runtime",
+    "Unity.Netcode.Components",
     "Unity.Animation.Rigging",
     "Unity.ugui"
   ],
