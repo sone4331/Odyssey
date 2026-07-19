@@ -21,6 +21,7 @@ namespace Odyssey.Characters.Enemies
 
         public IReadOnlyList<Transform> PatrolPoints => patrolPoints;
         public bool HasValidRoute => patrolPoints != null && patrolPoints.Length >= 2;
+        public float ArrivalDistance => arrivalDistance;
         public string CurrentPointName => HasValidRoute && patrolPoints[_currentIndex] != null
             ? patrolPoints[_currentIndex].name
             : "无";
@@ -106,6 +107,19 @@ namespace Odyssey.Characters.Enemies
         private void Advance()
         {
             _currentIndex = (_currentIndex + 1) % patrolPoints.Length;
+        }
+
+        /// <summary>
+        /// 由导航适配器在当前点不可达时跳到下一点，避免 Agent 对着断开的 NavMesh 岛持续原地播放跑步。
+        /// 路线只移动游标，不承担路径计算职责。
+        /// </summary>
+        public void SkipCurrentPoint()
+        {
+            _waitRemaining = 0f;
+            if (HasValidRoute)
+            {
+                Advance();
+            }
         }
 
         private void OnValidate()

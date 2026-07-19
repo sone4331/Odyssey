@@ -46,7 +46,7 @@ MonoBehaviour:
     attackMode: 0
     minimumAttackRange: 0
     projectileSpeed: 0
-    attackWindup: 0.2
+    attackWindup: 1.55
   - id: spitter
     chaseRange: 12
     attackRange: 8

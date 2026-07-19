@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using NUnit.Framework;
@@ -294,15 +295,33 @@ namespace Odyssey.Tests.PlayMode
                     encounter.State == Odyssey.Gameplay.Encounters.CombatEncounterState.Active),
                 Is.True,
                 "战区统计没有在场景开始后进入 Active");
-            var patrolStartPositions = encounters[1].Participants
+            Assert.That(encounters.Select(encounter => encounter.SequenceIndex),
+                Is.EqualTo(new[] { 0, 1 }),
+                "战区没有固化唯一且稳定的关卡顺序");
+            var player = Object.FindFirstObjectByType<PlayerController>();
+
+            // 关闭玩家目标，确保六只怪物都处于纯巡逻分支，而不是被感知或攻击逻辑干扰。
+            player.gameObject.SetActive(false);
+            var patrolEnemies = encounters.SelectMany(encounter => encounter.Participants).ToArray();
+            var patrolStartPositions = patrolEnemies
                 .Select(enemy => enemy.transform.position)
                 .ToArray();
-            yield return new WaitForSeconds(1.2f);
-            Assert.That(encounters[1].Participants.Select((enemy, index) =>
-                    Vector3.Distance(enemy.transform.position, patrolStartPositions[index]) > 0.05f ||
-                    enemy.GetComponent<UnityEngine.AI.NavMeshAgent>().hasPath).Any(moving => moving),
-                Is.True,
-                "未靠近第二战区时，怪物没有自主沿巡逻网络移动");
+            yield return new WaitForSeconds(2.5f);
+            for (var index = 0; index < patrolEnemies.Length; index++)
+            {
+                var enemy = patrolEnemies[index];
+                var agent = enemy.GetComponent<UnityEngine.AI.NavMeshAgent>();
+                var animator = enemy.GetComponent<Animator>();
+                Assert.That(animator.applyRootMotion, Is.False,
+                    $"怪物“{enemy.name}”仍由 Root Motion 覆盖 NavMeshAgent 位移");
+                Assert.That(agent.updatePosition && agent.updateRotation, Is.True,
+                    $"怪物“{enemy.name}”没有让 NavMeshAgent 驱动 Transform");
+                Assert.That(Vector3.Distance(enemy.transform.position, patrolStartPositions[index]),
+                    Is.GreaterThan(0.25f),
+                    $"怪物“{enemy.name}”只播放跑步动画但没有在巡逻点之间产生实际位移");
+                Assert.That(agent.pathStatus, Is.EqualTo(UnityEngine.AI.NavMeshPathStatus.PathComplete),
+                    $"怪物“{enemy.name}”的巡逻目标不在同一块可达 NavMesh");
+            }
 
             foreach (var encounter in encounters)
             {
@@ -321,6 +340,22 @@ namespace Odyssey.Tests.PlayMode
                     Assert.That(route.PatrolPoints.Count, Is.EqualTo(6));
                     Assert.That(route.MaximumPointDistance, Is.GreaterThanOrEqualTo(12f),
                         $"遭遇参与者“{enemy.name}”的巡逻网络没有覆盖主要战区");
+                    foreach (var patrolPoint in route.PatrolPoints)
+                    {
+                        var queryFilter = new UnityEngine.AI.NavMeshQueryFilter
+                        {
+                            agentTypeID = enemy.GetComponent<UnityEngine.AI.NavMeshAgent>().agentTypeID,
+                            areaMask = enemy.GetComponent<UnityEngine.AI.NavMeshAgent>().areaMask
+                        };
+                        Assert.That(UnityEngine.AI.NavMesh.FindClosestEdge(
+                                patrolPoint.position,
+                                out var edge,
+                                queryFilter),
+                            Is.True,
+                            $"巡逻点“{patrolPoint.name}”不在有效 NavMesh 上");
+                        Assert.That(edge.distance, Is.GreaterThanOrEqualTo(1.8f),
+                            $"巡逻点“{patrolPoint.name}”仍贴近墙角或狭窄边缘");
+                    }
                     var agent = enemy.GetComponent<UnityEngine.AI.NavMeshAgent>();
                     Assert.That(agent.enabled && agent.isOnNavMesh, Is.True,
                         $"遭遇参与者“{enemy.name}”没有稳定绑定到 NavMesh");
@@ -355,9 +390,37 @@ namespace Odyssey.Tests.PlayMode
             var gate = Object.FindFirstObjectByType<EncounterClearanceGate>();
             Assert.That(plate, Is.Not.Null, "场景没有用项目自有组件接管原踏板");
             Assert.That(gate, Is.Not.Null, "场景没有用项目自有组件接管原隔离门");
+            Assert.That(Object.FindObjectsByType<EncounterClearancePressurePlate>(
+                    FindObjectsInactive.Include,
+                    FindObjectsSortMode.None).Length,
+                Is.EqualTo(1),
+                "场景残留多套清怪踏板，旧引用可能绕过第一战区条件");
+            Assert.That(Object.FindObjectsByType<EncounterClearanceGate>(
+                    FindObjectsInactive.Include,
+                    FindObjectsSortMode.None).Length,
+                Is.EqualTo(1),
+                "场景残留多套隔离门控制器，旧门禁可能提前开门");
+            Assert.That(GetHierarchyPath(plate.transform), Does.EndWith("ExampleLevel/Mechanism1/PressurePad"),
+                "项目门禁没有接管主流程 Mechanism1 踏板");
+            Assert.That(GetHierarchyPath(gate.transform), Does.EndWith("ExampleLevel/FinalBuilding/DoorHuge"),
+                "项目门禁没有接管通往第二战区的 FinalBuilding 隔离门");
+            Assert.That(plate.RequiredEncounter, Is.SameAs(encounter),
+                "清怪踏板没有稳定绑定第一战区，可能错误统计另一组怪物");
 
-            InvokeTrigger(plate, "OnTriggerEnter", player.Controller);
-            Assert.That(gate.IsOpening || gate.IsOpen, Is.False, "清怪前踩踏板错误开启了隔离门");
+            var plateCollider = plate.GetComponent<Collider>();
+            Assert.That(plateCollider, Is.Not.Null, "项目门禁没有挂在原踏板 Trigger 上");
+            AssertThirdPartyCommandComponentsDisabled(plate.transform, gate.transform);
+
+            var closedPosition = gate.CurrentMovingPartLocalPosition;
+            Assert.That(closedPosition, Is.EqualTo(gate.ClosedLocalPosition),
+                "隔离门进入场景时没有强制恢复关闭姿态");
+            MovePlayer(player, plateCollider.bounds.center + Vector3.up * 0.2f);
+            Physics.SyncTransforms();
+            yield return new WaitForFixedUpdate();
+            yield return new WaitForSeconds(0.4f);
+            Assert.That(gate.IsOpening || gate.IsOpen, Is.False, "清怪前踩踏板错误开启了项目门禁");
+            Assert.That(gate.CurrentMovingPartLocalPosition, Is.EqualTo(closedPosition),
+                "原 3D Game Kit 踏板命令仍在旁路移动隔离门");
 
             foreach (var enemy in encounter.Participants)
             {
@@ -366,11 +429,14 @@ namespace Odyssey.Tests.PlayMode
 
             yield return null;
             Assert.That(encounter.State, Is.EqualTo(Odyssey.Gameplay.Encounters.CombatEncounterState.Completed));
-            InvokeTrigger(plate, "OnTriggerEnter", player.Controller);
             Assert.That(gate.IsOpening || gate.IsOpen, Is.False, "玩家站在板上清怪时隔离门自动开启");
 
-            InvokeTrigger(plate, "OnTriggerExit", player.Controller);
-            InvokeTrigger(plate, "OnTriggerEnter", player.Controller);
+            MovePlayer(player, plateCollider.bounds.center + Vector3.right * 5f);
+            Physics.SyncTransforms();
+            yield return new WaitForFixedUpdate();
+            MovePlayer(player, plateCollider.bounds.center + Vector3.up * 0.2f);
+            Physics.SyncTransforms();
+            yield return new WaitForFixedUpdate();
             Assert.That(gate.IsOpening, Is.True, "清怪后重新踩入踏板没有开启隔离门");
         }
 
@@ -428,9 +494,12 @@ namespace Odyssey.Tests.PlayMode
             yield return new WaitForSeconds(0.15f);
             Assert.That(enemy.CurrentGoal, Is.EqualTo(EnemyGoal.Attack),
                 "玩家进入攻击范围后，场景怪物没有从 Chase 切换到 Attack");
-            yield return new WaitForSeconds(0.35f);
+            yield return new WaitForSeconds(0.8f);
+            Assert.That(player.CurrentHealth, Is.EqualTo(healthBeforeAttack),
+                "Chomper 的伤害早于咬合动作接触玩家");
+            yield return new WaitForSeconds(1f);
             Assert.That(player.CurrentHealth, Is.LessThan(healthBeforeAttack),
-                "怪物进入 Attack 后没有在配置前摇结束时结算伤害");
+                "Chomper 没有在官方 AttackBegin 咬合帧或代码后备时刻结算伤害");
 
             MovePlayer(player, enemy.transform.position + Vector3.forward * (enemy.ForgetRange + 3f));
             yield return new WaitForSeconds(0.25f);
@@ -725,16 +794,40 @@ namespace Odyssey.Tests.PlayMode
             player.Controller.enabled = true;
         }
 
-        private static void InvokeTrigger(
-            EncounterClearancePressurePlate plate,
-            string methodName,
-            Collider collider)
+        private static void AssertThirdPartyCommandComponentsDisabled(
+            Transform plate,
+            Transform gate)
         {
-            var method = typeof(EncounterClearancePressurePlate).GetMethod(
-                methodName,
-                BindingFlags.Instance | BindingFlags.NonPublic);
-            Assert.That(method, Is.Not.Null, $"踏板缺少物理回调“{methodName}”");
-            method.Invoke(plate, new object[] { collider });
+            var blockedTypes = new[]
+            {
+                "Gamekit3D.GameCommands.SendOnTriggerEnter",
+                "Gamekit3D.InteractOnTrigger",
+                "Gamekit3D.GameCommands.SimpleTranslator",
+                "Gamekit3D.GameCommands.GameCommandReceiver"
+            };
+            var nearbyBehaviours = Object.FindObjectsByType<MonoBehaviour>(
+                    FindObjectsInactive.Include,
+                    FindObjectsSortMode.None)
+                .Where(behaviour => behaviour != null &&
+                                    blockedTypes.Contains(behaviour.GetType().FullName) &&
+                                    (Vector3.Distance(behaviour.transform.position, plate.position) < 8f ||
+                                     Vector3.Distance(behaviour.transform.position, gate.position) < 8f));
+            foreach (var behaviour in nearbyBehaviours)
+            {
+                Assert.That(behaviour.enabled, Is.False,
+                    $"第三方组件“{behaviour.GetType().FullName}”仍可能绕过清怪条件触发门");
+            }
+        }
+
+        private static string GetHierarchyPath(Transform transform)
+        {
+            var names = new Stack<string>();
+            for (var current = transform; current != null; current = current.parent)
+            {
+                names.Push(current.name);
+            }
+
+            return string.Join("/", names);
         }
 
         private static void SetJumpPressed(PlayerController player, bool pressed)

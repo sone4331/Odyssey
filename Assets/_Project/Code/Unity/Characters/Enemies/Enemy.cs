@@ -48,6 +48,7 @@ namespace Odyssey.Characters.Enemies
         private EnemyActionRuntime _actions;
         private EnemyPatrolRoute _patrolRoute;
         private bool _meleeDamageCommitted;
+        private float _meleeDamageReadyAt;
         private bool _isDead;
         private Vector3 _deathFlyDirection;
         private float _deathFlySpeed;
@@ -187,7 +188,7 @@ namespace Odyssey.Characters.Enemies
 
         /// <summary>
         /// 由代码前摇或兼容的攻击动画事件调用；每次攻击序列只允许提交一次近战伤害。
-        /// 查询保持局部简单实现，不为了六只怪物的低频攻击引入全局对象池或通用战斗管理器。
+        /// 命中帧会重新校验目标距离与正面夹角，避免前摇期间玩家已经闪开却仍被提前或背后结算。
         /// </summary>
         public void AttackBegin()
         {
@@ -196,20 +197,34 @@ namespace Odyssey.Characters.Enemies
                 return;
             }
 
-            _meleeDamageCommitted = true;
-
-            var attackCenter = transform.position + Vector3.up + transform.forward * 0.5f;
-            foreach (var hit in Physics.OverlapSphere(attackCenter, AttackRange))
+            // 官方动画事件只提供表现时刻；若事件早于配置的咬合前摇，等待代码计时后备再结算，避免“牙齿未合上先掉血”。
+            if (Time.time + 0.02f < _meleeDamageReadyAt)
             {
-                var player = hit.GetComponentInParent<Player.PlayerController>();
-                if (player == null)
-                {
-                    continue;
-                }
-
-                player.TakeDamage(AttackDamage, transform.position);
-                break;
+                return;
             }
+
+            var player = _perception.Target == null
+                ? null
+                : _perception.Target.GetComponentInParent<Player.PlayerController>();
+            if (player == null || player.CurrentHealth <= 0)
+            {
+                return;
+            }
+
+            var toPlayer = Vector3.ProjectOnPlane(player.transform.position - transform.position, Vector3.up);
+            if (toPlayer.magnitude > AttackRange || toPlayer.sqrMagnitude <= 0.001f)
+            {
+                return;
+            }
+
+            // 命中时再次校验朝向，避免玩家已经绕到怪物身后仍被“空气咬”结算伤害。
+            if (Vector3.Dot(transform.forward, toPlayer.normalized) < 0.35f)
+            {
+                return;
+            }
+
+            _meleeDamageCommitted = true;
+            player.TakeDamage(AttackDamage, transform.position);
         }
 
         private void RebuildHealth(int maximum, int current)
@@ -238,6 +253,18 @@ namespace Odyssey.Characters.Enemies
         {
             _animator ??= GetComponent<Animator>();
             _agent ??= GetComponent<NavMeshAgent>();
+            if (_animator != null)
+            {
+                // 位移权威属于 NavMeshAgent；开启 Root Motion 会在 Animator 更新阶段把 Agent 位移覆盖为动画根节点位移，表现为原地跑。
+                _animator.applyRootMotion = false;
+                _animator.updateMode = AnimatorUpdateMode.Normal;
+            }
+
+            if (_agent != null)
+            {
+                _agent.updatePosition = true;
+                _agent.updateRotation = true;
+            }
             _blackboard ??= new EnemyBlackboard();
             _perception ??= new EnemyPerception(transform);
             _patrolRoute ??= GetComponent<EnemyPatrolRoute>();
@@ -282,6 +309,8 @@ namespace Odyssey.Characters.Enemies
 
             transform.position = hit.position;
             _agent.enabled = true;
+            _agent.updatePosition = true;
+            _agent.updateRotation = true;
             if (!_agent.isOnNavMesh)
             {
                 _agent.enabled = false;
@@ -292,6 +321,7 @@ namespace Odyssey.Characters.Enemies
         private void BeginMeleeAttackSequence()
         {
             _meleeDamageCommitted = false;
+            _meleeDamageReadyAt = Time.time + Mathf.Max(0f, _attackWindup);
         }
 
         private void Die()

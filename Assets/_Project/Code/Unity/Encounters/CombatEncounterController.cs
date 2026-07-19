@@ -12,6 +12,7 @@ namespace Odyssey.Encounters
     /// </summary>
     public sealed class CombatEncounterController : MonoBehaviour
     {
+        [SerializeField, Min(0)] private int sequenceIndex;
         [SerializeField] private string displayName = "战斗区域";
         [SerializeField] private Enemy[] participants = Array.Empty<Enemy>();
 
@@ -19,6 +20,7 @@ namespace Odyssey.Encounters
         private CombatEncounterProgress _progress;
 
         public IReadOnlyList<Enemy> Participants => participants;
+        public int SequenceIndex => sequenceIndex;
         public string DisplayName => string.IsNullOrWhiteSpace(displayName) ? "战斗区域" : displayName;
         public CombatEncounterState State => _progress?.State ?? CombatEncounterState.Waiting;
         public int RemainingEnemies => _progress?.RemainingEnemies ?? participants.Length;

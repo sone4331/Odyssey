@@ -9,6 +9,7 @@ namespace Odyssey.Encounters
     public sealed class EncounterClearanceGate : MonoBehaviour
     {
         [SerializeField] private Transform movingPart;
+        [SerializeField] private Vector3 closedLocalPosition;
         [SerializeField] private Vector3 openLocalOffset = Vector3.down * 10.1f;
         [SerializeField, Min(0.05f)] private float openDuration = 1.2f;
         [SerializeField] private AudioSource audioSource;
@@ -19,6 +20,10 @@ namespace Odyssey.Encounters
 
         public bool IsOpening { get; private set; }
         public bool IsOpen { get; private set; }
+        public Vector3 ClosedLocalPosition => _closedLocalPosition;
+        public Vector3 CurrentMovingPartLocalPosition => movingPart == null
+            ? Vector3.zero
+            : movingPart.localPosition;
 
         private void Awake()
         {
@@ -29,7 +34,9 @@ namespace Odyssey.Encounters
                 return;
             }
 
-            _closedLocalPosition = movingPart.localPosition;
+            // 无论上一次运行或第三方预览把门板留在何处，进入场景时都以构建阶段固化的关闭位置为准。
+            _closedLocalPosition = closedLocalPosition;
+            movingPart.localPosition = _closedLocalPosition;
             _openLocalPosition = _closedLocalPosition + openLocalOffset;
         }
 

@@ -19,6 +19,8 @@ namespace Odyssey.Characters.Enemies
         private readonly Animator _animator;
         private readonly NavMeshAgent _agent;
         private readonly float _combatMoveSpeed;
+        private readonly float _combatStoppingDistance;
+        private readonly NavMeshPath _patrolPath = new NavMeshPath();
         private EnemyPatrolRoute _patrolRoute;
         private Transform _target;
         private string _currentAnimation = string.Empty;
@@ -27,6 +29,8 @@ namespace Odyssey.Characters.Enemies
         private float _attackLockRemaining;
         private float _chaseRefreshRemaining;
         private float _retreatRefreshRemaining;
+        private Vector3 _lastPatrolDestination;
+        private bool _hasPatrolDestination;
         private EnemyAttackMode _attackMode;
         private float _attackWindup;
         private float _pendingAttackRemaining = -1f;
@@ -42,6 +46,7 @@ namespace Odyssey.Characters.Enemies
             _animator = animator;
             _agent = agent;
             _combatMoveSpeed = agent == null ? 0f : agent.speed;
+            _combatStoppingDistance = agent == null ? 0f : agent.stoppingDistance;
         }
 
         public bool IsHitReacting => _hitLockRemaining > 0f;
@@ -137,6 +142,10 @@ namespace Odyssey.Characters.Enemies
             {
                 _retreatRefreshRemaining = 0f;
             }
+            else if (goal == EnemyGoal.Patrol)
+            {
+                _hasPatrolDestination = false;
+            }
 
             StopNavigation();
         }
@@ -179,7 +188,7 @@ namespace Odyssey.Characters.Enemies
                 return;
             }
 
-            RestoreCombatSpeed();
+            RestoreCombatNavigation();
             _chaseRefreshRemaining -= deltaTime;
             if (_chaseRefreshRemaining <= 0f)
             {
@@ -231,7 +240,8 @@ namespace Odyssey.Characters.Enemies
                 return;
             }
 
-            RestoreCombatSpeed();
+            RestoreCombatNavigation();
+            _agent.stoppingDistance = 0.1f;
             _retreatRefreshRemaining -= deltaTime;
             if (_retreatRefreshRemaining <= 0f)
             {
@@ -273,14 +283,38 @@ namespace Odyssey.Characters.Enemies
 
             if (waiting)
             {
+                _hasPatrolDestination = false;
                 StopNavigation();
                 PlayAnimation("Idle", 0.12f);
                 return;
             }
 
             _agent.speed = Mathf.Max(0.1f, _combatMoveSpeed * 0.55f);
+            // 巡逻到点判定必须大于 Agent 的停止距离，否则 Agent 会停在判定圈外并永远无法切换下一个点。
+            _agent.stoppingDistance = Mathf.Max(0.05f, _patrolRoute.ArrivalDistance * 0.8f);
+            if (!_hasPatrolDestination || Vector3.Distance(_lastPatrolDestination, destination) > 0.05f)
+            {
+                var filter = new NavMeshQueryFilter
+                {
+                    agentTypeID = _agent.agentTypeID,
+                    areaMask = _agent.areaMask
+                };
+                if (!NavMesh.CalculatePath(_owner.position, destination, filter, _patrolPath) ||
+                    _patrolPath.status != NavMeshPathStatus.PathComplete)
+                {
+                    _patrolRoute.SkipCurrentPoint();
+                    _hasPatrolDestination = false;
+                    StopNavigation();
+                    PlayAnimation("Idle", 0.12f);
+                    return;
+                }
+
+                _agent.SetPath(_patrolPath);
+                _lastPatrolDestination = destination;
+                _hasPatrolDestination = true;
+            }
+
             _agent.isStopped = false;
-            _agent.SetDestination(destination);
             PlayAnimation(_attackMode == EnemyAttackMode.Projectile ? "Fleeing" : "Run", 0.12f);
         }
 
@@ -354,11 +388,12 @@ namespace Odyssey.Characters.Enemies
             return _animator.HasState(0, Animator.StringToHash("Base Layer." + stateName));
         }
 
-        private void RestoreCombatSpeed()
+        private void RestoreCombatNavigation()
         {
             if (_agent != null && _combatMoveSpeed > 0f)
             {
                 _agent.speed = _combatMoveSpeed;
+                _agent.stoppingDistance = _combatStoppingDistance;
             }
         }
 

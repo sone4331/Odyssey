@@ -20,8 +20,10 @@ namespace Odyssey.Editor.Gameplay
     /// 自动生成干净的 Spitter、投射物、两组遭遇和巡逻路线，是玩法切片资产装配的唯一 Editor 入口。
     /// 采用 Builder 与幂等资产管线：复用官方美术但移除教学脚本，重复执行会更新同一资产而不会堆叠对象。
     /// </summary>
+    [InitializeOnLoad]
     public static class SinglePlayerSliceBuilder
     {
+        private const string AutomationRequestPath = "Temp/BuildSinglePlayerSlice.request";
         private const string ScenePath = "Assets/_Project/Content/Scenes/Level_01.unity";
         private const string SliceRootName = "玩法切片_战斗遭遇";
         private const string OriginalSpitterPath = "Assets/3DGamekitLite/Prefabs/Characters/Enemies/Spitter/Spitter.prefab";
@@ -36,6 +38,39 @@ namespace Odyssey.Editor.Gameplay
         private const string SpitterPrefabPath = GeneratedFolder + "/Spitter.prefab";
         private const string SpitterControllerPath = "Assets/_Project/Content/Animations/Enemies/SpitterAnimator.controller";
         private const string TelegraphMaterialPath = GeneratedFolder + "/SpitterTelegraph.mat";
+
+        static SinglePlayerSliceBuilder()
+        {
+            if (!System.IO.File.Exists(AutomationRequestPath))
+            {
+                return;
+            }
+
+            System.IO.File.Delete(AutomationRequestPath);
+            EditorApplication.delayCall += BuildWhenEditorReady;
+        }
+
+        /// <summary>
+        /// 供本地自动验收在 Unity 完成编译后调用同一 Builder；如果编辑器仍处于运行模式，先安全退出再重试。
+        /// 复用菜单入口而不复制搭建逻辑，保证人工点击和自动验收生成完全相同的场景结果。
+        /// </summary>
+        private static void BuildWhenEditorReady()
+        {
+            if (EditorApplication.isPlayingOrWillChangePlaymode)
+            {
+                EditorApplication.isPlaying = false;
+                EditorApplication.delayCall += BuildWhenEditorReady;
+                return;
+            }
+
+            if (EditorApplication.isCompiling || EditorApplication.isUpdating)
+            {
+                EditorApplication.delayCall += BuildWhenEditorReady;
+                return;
+            }
+
+            BuildSinglePlayerSlice();
+        }
 
         /// <summary>
         /// 依次创建可复用内容资产并装配 Level_01；全部引用设置完成后才保存场景，避免留下半成品状态。
@@ -297,6 +332,7 @@ namespace Odyssey.Editor.Gameplay
         private static void ConfigureScene(GameObject spitterPrefab)
         {
             var scene = EditorSceneManager.OpenScene(ScenePath, OpenSceneMode.Single);
+            ClearExistingClearanceOverrides();
             var oldRoot = GameObject.Find(SliceRootName);
             if (oldRoot != null)
             {
@@ -311,9 +347,12 @@ namespace Odyssey.Editor.Gameplay
             }
 
             var player = Object.FindFirstObjectByType<PlayerController>();
+            var gameplayStartPosition = player != null && player.RespawnPoint != null
+                ? player.RespawnPoint.position
+                : player == null ? Vector3.zero : player.transform.position;
             var existingEnemies = Object.FindObjectsByType<Enemy>(FindObjectsInactive.Include, FindObjectsSortMode.None)
                 .Where(enemy => enemy.ConfigId == "chomper")
-                .OrderBy(enemy => player == null ? 0f : Vector3.Distance(player.transform.position, enemy.transform.position))
+                .OrderBy(enemy => Vector3.Distance(gameplayStartPosition, enemy.transform.position))
                 .ToArray();
             if (player == null || existingEnemies.Length < 4)
             {
@@ -332,7 +371,8 @@ namespace Odyssey.Editor.Gameplay
             }
 
             var groups = PairIntoNearestGroups(selectedEnemies)
-                .OrderBy(group => Vector3.Distance(player.transform.position, GetGroupCenter(group)))
+                .OrderBy(group => GetGameplayPathDistance(gameplayStartPosition, group))
+                .ThenBy(group => GetNearestGroupDistance(gameplayStartPosition, group))
                 .ToArray();
             var root = new GameObject(SliceRootName);
             root.transform.position = Vector3.zero;
@@ -344,7 +384,8 @@ namespace Odyssey.Editor.Gameplay
                     player,
                     groups[groupIndex],
                     spitterPrefab,
-                    groupIndex);
+                    groupIndex,
+                    gameplayStartPosition);
             }
 
             EditorSceneManager.MarkSceneDirty(scene);
@@ -380,6 +421,61 @@ namespace Odyssey.Editor.Gameplay
             return (group[0].transform.position + group[1].transform.position) * 0.5f;
         }
 
+        private static float GetNearestGroupDistance(Vector3 position, IReadOnlyList<Enemy> group)
+        {
+            return group.Min(enemy => Vector3.Distance(position, enemy.transform.position));
+        }
+
+        /// <summary>
+        /// 用 NavMesh 实际路径长度判定关卡先后顺序，而不是使用可能穿过墙体和隔离门的直线距离。
+        /// 这是场景构建阶段的一次性拓扑判断；结果会固化为 sequenceIndex，运行时不再根据巡逻中的怪物位置重新编号。
+        /// </summary>
+        private static float GetGameplayPathDistance(Vector3 startPosition, IReadOnlyList<Enemy> group)
+        {
+            var agent = group.Select(enemy => enemy.GetComponent<NavMeshAgent>())
+                .FirstOrDefault(candidate => candidate != null);
+            if (agent == null)
+            {
+                return float.MaxValue;
+            }
+
+            var queryFilter = new NavMeshQueryFilter
+            {
+                agentTypeID = agent.agentTypeID,
+                areaMask = agent.areaMask
+            };
+            if (!NavMesh.SamplePosition(startPosition, out var startHit, 4f, queryFilter))
+            {
+                return float.MaxValue;
+            }
+
+            var bestDistance = float.MaxValue;
+            foreach (var enemy in group)
+            {
+                if (!NavMesh.SamplePosition(enemy.transform.position, out var enemyHit, 4f, queryFilter))
+                {
+                    continue;
+                }
+
+                var path = new NavMeshPath();
+                if (!NavMesh.CalculatePath(startHit.position, enemyHit.position, queryFilter, path) ||
+                    path.status != NavMeshPathStatus.PathComplete)
+                {
+                    continue;
+                }
+
+                var length = 0f;
+                for (var cornerIndex = 1; cornerIndex < path.corners.Length; cornerIndex++)
+                {
+                    length += Vector3.Distance(path.corners[cornerIndex - 1], path.corners[cornerIndex]);
+                }
+
+                bestDistance = Mathf.Min(bestDistance, length);
+            }
+
+            return bestDistance;
+        }
+
         /// <summary>
         /// 创建一组两只近战怪、一只远程怪、共享巡逻网络、HUD 和反馈。
         /// 怪物从场景启动起自主感知，遭遇控制器只统计死亡结果，不再承担 AI 激活职责。
@@ -390,13 +486,14 @@ namespace Odyssey.Editor.Gameplay
             PlayerController player,
             Enemy[] chompers,
             GameObject spitterPrefab,
-            int groupIndex)
+            int groupIndex,
+            Vector3 gameplayStartPosition)
         {
             var displayName = groupIndex == 0 ? "第一战区" : "第二战区";
             var groupRoot = new GameObject(groupIndex == 0 ? "第一战斗组" : "第二战斗组");
             groupRoot.transform.SetParent(container, false);
             var arenaCenter = GetGroupCenter(chompers);
-            var awayFromPlayer = Vector3.ProjectOnPlane(arenaCenter - player.transform.position, Vector3.up).normalized;
+            var awayFromPlayer = Vector3.ProjectOnPlane(arenaCenter - gameplayStartPosition, Vector3.up).normalized;
             if (awayFromPlayer == Vector3.zero)
             {
                 awayFromPlayer = player.transform.forward;
@@ -414,6 +511,7 @@ namespace Odyssey.Editor.Gameplay
             chompers[1].name = $"{displayName}_Chomper_2";
             var encounter = groupRoot.AddComponent<CombatEncounterController>();
             var serializedEncounter = new SerializedObject(encounter);
+            serializedEncounter.FindProperty("sequenceIndex").intValue = groupIndex;
             serializedEncounter.FindProperty("displayName").stringValue = displayName;
             var participants = serializedEncounter.FindProperty("participants");
             participants.arraySize = 3;
@@ -437,8 +535,8 @@ namespace Odyssey.Editor.Gameplay
         }
 
         /// <summary>
-        /// 为同一战区生成六个共享 NavMesh 巡逻点，并让三只怪物从不同索引开始巡逻。
-        /// 共享网络覆盖主要战斗空间，同时避免为每只怪物复制一套近距离小三角路线。
+        /// 为同一战区生成六个处于同一 NavMesh 连通区域的巡逻点，并把三只怪物放到不同起始点。
+        /// 只有“采样到网格”并不足以证明可达，因此每个候选点都必须从锚点计算出完整路径后才能进入路线。
         /// </summary>
         private static void BuildSharedPatrolNetwork(
             Transform parent,
@@ -449,18 +547,13 @@ namespace Odyssey.Editor.Gameplay
             var routeRoot = new GameObject("共享宽范围巡逻网络");
             routeRoot.transform.SetParent(parent, true);
             routeRoot.transform.position = Vector3.zero;
-            var side = Vector3.Cross(Vector3.up, groupForward).normalized;
-            const float radius = 8f;
-            var desiredPositions = new[]
+            groupForward = Vector3.ProjectOnPlane(groupForward, Vector3.up).normalized;
+            if (groupForward.sqrMagnitude < 0.01f)
             {
-                arenaCenter + groupForward * radius,
-                arenaCenter + groupForward * 4f + side * 7f,
-                arenaCenter - groupForward * 4f + side * 7f,
-                arenaCenter - groupForward * radius,
-                arenaCenter - groupForward * 4f - side * 7f,
-                arenaCenter + groupForward * 4f - side * 7f
-            };
-            var points = new Transform[desiredPositions.Length];
+                groupForward = Vector3.forward;
+            }
+
+            var side = Vector3.Cross(Vector3.up, groupForward).normalized;
             var agent = enemies.Select(enemy => enemy == null ? null : enemy.GetComponent<NavMeshAgent>())
                 .FirstOrDefault(candidate => candidate != null);
             if (agent == null)
@@ -473,21 +566,57 @@ namespace Odyssey.Editor.Gameplay
                 agentTypeID = agent.agentTypeID,
                 areaMask = agent.areaMask
             };
-            for (var pointIndex = 0; pointIndex < desiredPositions.Length; pointIndex++)
+            if (!NavMesh.SamplePosition(enemies[0].transform.position, out var anchorHit, 4f, queryFilter))
             {
-                if (!NavMesh.SamplePosition(desiredPositions[pointIndex], out var hit, 6f, queryFilter))
-                {
-                    throw new InvalidOperationException($"无法为战区共享巡逻点 {pointIndex + 1} 找到 NavMesh。");
-                }
+                throw new InvalidOperationException("第一只怪物附近没有对应类型的 NavMesh，无法建立巡逻锚点。");
+            }
 
-                if (points.Take(pointIndex).Any(point => Vector3.Distance(point.position, hit.position) < 2f))
+            var openCandidates = new List<Vector3>();
+            var searchCenter = Vector3.Lerp(anchorHit.position, arenaCenter, 0.35f);
+            var radii = new[] { 4f, 6f, 8f, 10f, 12f, 14f, 16f };
+            for (var angleIndex = 0; angleIndex < 24; angleIndex++)
+            {
+                var angle = angleIndex * 15f * Mathf.Deg2Rad;
+                foreach (var radius in radii)
                 {
-                    throw new InvalidOperationException($"共享巡逻点 {pointIndex + 1} 与已有点过近，请检查战区 NavMesh 覆盖。");
+                    var desired = searchCenter +
+                                  groupForward * (Mathf.Cos(angle) * radius) +
+                                  side * (Mathf.Sin(angle) * radius);
+                    if (!NavMesh.SamplePosition(desired, out var hit, 1.5f, queryFilter) ||
+                        Mathf.Abs(hit.position.y - anchorHit.position.y) > 1f ||
+                        Vector3.Distance(
+                            Vector3.ProjectOnPlane(hit.position, Vector3.up),
+                            Vector3.ProjectOnPlane(desired, Vector3.up)) > 1.5f ||
+                        openCandidates.Any(position => Vector3.Distance(position, hit.position) < 1.5f) ||
+                        !HasCompletePath(anchorHit.position, hit.position, queryFilter) ||
+                        !HasOpenPatrolArea(hit.position, queryFilter))
+                    {
+                        continue;
+                    }
+
+                    openCandidates.Add(hit.position);
+                }
+            }
+
+            if (openCandidates.Count < 6)
+            {
+                throw new InvalidOperationException(
+                    $"战区只找到 {openCandidates.Count} 个远离墙角且同区可达的候选点，未达到六点路线要求。");
+            }
+
+            var reachablePositions = SelectWidePatrolPoints(openCandidates, searchCenter, groupForward, side);
+            var points = new Transform[reachablePositions.Count];
+            for (var pointIndex = 0; pointIndex < reachablePositions.Count; pointIndex++)
+            {
+                var nextIndex = (pointIndex + 1) % reachablePositions.Count;
+                if (!HasCompletePath(reachablePositions[pointIndex], reachablePositions[nextIndex], queryFilter))
+                {
+                    throw new InvalidOperationException($"巡逻点 {pointIndex + 1} 无法到达巡逻点 {nextIndex + 1}。");
                 }
 
                 var pointObject = new GameObject($"共享巡逻点_{pointIndex + 1}");
                 pointObject.transform.SetParent(routeRoot.transform, true);
-                pointObject.transform.position = hit.position;
+                pointObject.transform.position = reachablePositions[pointIndex];
                 points[pointIndex] = pointObject.transform;
             }
 
@@ -504,6 +633,8 @@ namespace Odyssey.Editor.Gameplay
             for (var enemyIndex = 0; enemyIndex < enemies.Count; enemyIndex++)
             {
                 var enemy = enemies[enemyIndex];
+                var startIndex = enemyIndex * 2;
+                ConfigureCodeDrivenNavigation(enemy, points[startIndex].position);
                 var route = enemy.GetComponent<EnemyPatrolRoute>();
                 if (route == null)
                 {
@@ -518,11 +649,129 @@ namespace Odyssey.Editor.Gameplay
                     patrolPoints.GetArrayElementAtIndex(pointIndex).objectReferenceValue = points[pointIndex];
                 }
 
-                serializedRoute.FindProperty("initialPointIndex").intValue = enemyIndex * 2;
+                serializedRoute.FindProperty("initialPointIndex").intValue = startIndex;
                 serializedRoute.FindProperty("waitDuration").floatValue = 0.55f + enemyIndex * 0.15f;
                 serializedRoute.ApplyModifiedPropertiesWithoutUndo();
                 EditorUtility.SetDirty(route);
             }
+        }
+
+        private static bool HasCompletePath(
+            Vector3 source,
+            Vector3 destination,
+            NavMeshQueryFilter queryFilter)
+        {
+            var path = new NavMeshPath();
+            return NavMesh.CalculatePath(source, destination, queryFilter, path) &&
+                   path.status == NavMeshPathStatus.PathComplete;
+        }
+
+        /// <summary>
+        /// 使用最远点采样从开阔候选中选出覆盖范围最大的六点，再按环绕战区中心的角度排序成稳定环路。
+        /// 该贪心算法只解决当前固定六点的小规模装配问题，比引入通用聚类或路径编辑器更直接。
+        /// </summary>
+        private static List<Vector3> SelectWidePatrolPoints(
+            IReadOnlyList<Vector3> candidates,
+            Vector3 center,
+            Vector3 forward,
+            Vector3 side)
+        {
+            const int requiredCount = 6;
+            var selected = new List<Vector3>
+            {
+                candidates.OrderBy(position => Vector3.Distance(position, center)).First()
+            };
+            while (selected.Count < requiredCount)
+            {
+                var next = candidates
+                    .Where(candidate => !selected.Contains(candidate))
+                    .OrderByDescending(candidate => selected.Min(chosen => Vector3.Distance(candidate, chosen)))
+                    .ThenBy(candidate => Mathf.Abs(Vector3.Distance(candidate, center) - 9f))
+                    .First();
+                selected.Add(next);
+            }
+
+            selected = selected
+                .OrderBy(position =>
+                {
+                    var offset = Vector3.ProjectOnPlane(position - center, Vector3.up);
+                    return Mathf.Atan2(Vector3.Dot(offset, side), Vector3.Dot(offset, forward));
+                })
+                .ToList();
+            var maximumDistance = selected.Max(first => selected.Max(second => Vector3.Distance(first, second)));
+            if (maximumDistance < 12f)
+            {
+                throw new InvalidOperationException("开阔候选点过于集中，无法形成跨度至少 12 米的巡逻路线。");
+            }
+
+            return selected;
+        }
+
+        /// <summary>
+        /// 从候选点向八个水平方向检查约两米的可行走空间，至少六个方向保持连通才视为开阔巡逻区。
+        /// 该 NavMesh 净空判定会排除墙角、窄缝和装饰物边缘，不额外维护人工障碍物标签。
+        /// </summary>
+        private static bool HasOpenPatrolArea(Vector3 position, NavMeshQueryFilter queryFilter)
+        {
+            const float clearanceRadius = 1.8f;
+            const float sampleTolerance = 0.75f;
+            if (!NavMesh.FindClosestEdge(position, out var closestEdge, queryFilter) ||
+                closestEdge.distance < clearanceRadius)
+            {
+                return false;
+            }
+
+            var openDirections = 0;
+            for (var directionIndex = 0; directionIndex < 8; directionIndex++)
+            {
+                var angle = directionIndex * 45f * Mathf.Deg2Rad;
+                var direction = new Vector3(Mathf.Cos(angle), 0f, Mathf.Sin(angle));
+                var desired = position + direction * clearanceRadius;
+                if (!NavMesh.SamplePosition(desired, out var hit, sampleTolerance, queryFilter) ||
+                    Vector3.Distance(hit.position, desired) > sampleTolerance ||
+                    !HasCompletePath(position, hit.position, queryFilter))
+                {
+                    continue;
+                }
+
+                openDirections++;
+            }
+
+            return openDirections >= 5;
+        }
+
+        /// <summary>
+        /// 将怪物放到已验证的路线起点，并明确关闭 Root Motion、开启 Agent 位置与旋转同步。
+        /// Animator 只表现跑步；若让零位移动画继续拥有根节点权威，它会在每帧末尾覆盖 NavMeshAgent 位移。
+        /// </summary>
+        private static void ConfigureCodeDrivenNavigation(Enemy enemy, Vector3 startPosition)
+        {
+            var animator = enemy.GetComponent<Animator>();
+            if (animator != null)
+            {
+                animator.applyRootMotion = false;
+                animator.updateMode = AnimatorUpdateMode.Normal;
+                EditorUtility.SetDirty(animator);
+            }
+
+            var agent = enemy.GetComponent<NavMeshAgent>();
+            if (agent == null)
+            {
+                throw new InvalidOperationException($"怪物“{enemy.name}”缺少 NavMeshAgent。");
+            }
+
+            var wasEnabled = agent.enabled;
+            if (wasEnabled)
+            {
+                agent.enabled = false;
+            }
+
+            enemy.transform.position = startPosition;
+            agent.updatePosition = true;
+            agent.updateRotation = true;
+            agent.enabled = wasEnabled;
+            EditorUtility.SetDirty(enemy.transform);
+            EditorUtility.SetDirty(agent);
         }
 
         /// <summary>
@@ -572,31 +821,39 @@ namespace Odyssey.Editor.Gameplay
         }
 
         /// <summary>
-        /// 接管第一战区附近的 3D Game Kit Lite PressurePad 与 DoorHuge，禁用原教学命令脚本并装配项目自有双条件门禁。
-        /// 通过类型全名识别第三方组件，避免 Odyssey.Unity 程序集反向依赖 Assembly-CSharp。
+        /// 接管主流程中 Mechanism1 踏板与 FinalBuilding 隔离门，移除原教学命令并装配项目自有双条件门禁。
+        /// Level_01 同时包含教学示例门，必须使用稳定层级路径而不是“离怪物最近”，否则会接管错误机关。
         /// </summary>
         private static void ConfigureExistingClearanceGate(
             CombatEncounterController encounter,
             Vector3 arenaCenter)
         {
             var sceneTransforms = Object.FindObjectsByType<Transform>(FindObjectsInactive.Include, FindObjectsSortMode.None);
-            var padRoot = sceneTransforms
-                .Where(transform => transform.name.IndexOf("PressurePad", StringComparison.OrdinalIgnoreCase) >= 0)
-                .OrderBy(transform => Vector3.Distance(transform.position, arenaCenter))
-                .FirstOrDefault();
-            var doorRoot = sceneTransforms
-                .Where(transform => string.Equals(transform.name, "DoorHuge", StringComparison.OrdinalIgnoreCase))
-                .OrderBy(transform => Vector3.Distance(transform.position, arenaCenter))
-                .FirstOrDefault();
-            if (padRoot == null || doorRoot == null)
+            var doorCandidate = sceneTransforms.FirstOrDefault(transform =>
+                GetHierarchyPath(transform).EndsWith(
+                    "ExampleLevel/FinalBuilding/DoorHuge",
+                    StringComparison.Ordinal));
+            if (doorCandidate == null)
             {
-                throw new InvalidOperationException("第一战区附近未找到原关卡 PressurePad 或 DoorHuge，无法配置清怪门禁。");
+                throw new InvalidOperationException("未找到主流程路径 ExampleLevel/FinalBuilding/DoorHuge，拒绝误接管教学示例门。");
             }
 
-            DisableThirdPartyBehaviours(padRoot.gameObject,
+            var doorRoot = ResolvePrefabRoot(doorCandidate.gameObject).transform;
+            var padCandidate = sceneTransforms.FirstOrDefault(transform =>
+                GetHierarchyPath(transform).EndsWith(
+                    "ExampleLevel/Mechanism1/PressurePad",
+                    StringComparison.Ordinal));
+            if (padCandidate == null)
+            {
+                throw new InvalidOperationException("未找到主流程路径 ExampleLevel/Mechanism1/PressurePad，无法配置清怪门禁。");
+            }
+
+            var padRoot = ResolvePrefabRoot(padCandidate.gameObject).transform;
+
+            RemoveThirdPartyBehaviours(padRoot.gameObject,
                 "Gamekit3D.GameCommands.SendOnTriggerEnter",
                 "Gamekit3D.InteractOnTrigger");
-            DisableThirdPartyBehaviours(doorRoot.gameObject,
+            RemoveThirdPartyBehaviours(doorRoot.gameObject,
                 "Gamekit3D.GameCommands.SimpleTranslator",
                 "Gamekit3D.GameCommands.GameCommandReceiver");
 
@@ -607,6 +864,13 @@ namespace Odyssey.Editor.Gameplay
             {
                 throw new InvalidOperationException("DoorHuge 缺少可移动 Rigidbody 门板。");
             }
+
+            var sourceMovingPart = PrefabUtility.GetCorrespondingObjectFromSource(movingBody.transform);
+            var closedLocalPosition = sourceMovingPart == null
+                ? movingBody.transform.localPosition
+                : sourceMovingPart.localPosition;
+            movingBody.transform.localPosition = closedLocalPosition;
+            movingBody.position = movingBody.transform.position;
 
             var audioSource = doorRoot.GetComponent<AudioSource>();
             if (audioSource == null)
@@ -624,6 +888,7 @@ namespace Odyssey.Editor.Gameplay
             }
             var serializedGate = new SerializedObject(gate);
             serializedGate.FindProperty("movingPart").objectReferenceValue = movingBody.transform;
+            serializedGate.FindProperty("closedLocalPosition").vector3Value = closedLocalPosition;
             serializedGate.FindProperty("openLocalOffset").vector3Value = Vector3.down * 10.1f;
             serializedGate.FindProperty("audioSource").objectReferenceValue = audioSource;
             serializedGate.ApplyModifiedPropertiesWithoutUndo();
@@ -645,19 +910,81 @@ namespace Odyssey.Editor.Gameplay
             var serializedPlate = new SerializedObject(pressurePlate);
             serializedPlate.FindProperty("encounter").objectReferenceValue = encounter;
             serializedPlate.FindProperty("gate").objectReferenceValue = gate;
+            serializedPlate.FindProperty("triggerVolume").objectReferenceValue = triggerCollider;
             serializedPlate.ApplyModifiedPropertiesWithoutUndo();
+            Debug.Log($"第一战区门禁已接管：踏板“{padRoot.name}” → 隔离门“{doorRoot.name}”。");
         }
 
-        private static void DisableThirdPartyBehaviours(GameObject root, params string[] typeNames)
+        /// <summary>
+        /// 清除前几次场景构建遗留的项目门禁，并把被接管过的门恢复到 Prefab 定义的关闭姿态。
+        /// Builder 必须幂等：重复执行后场景中始终只能存在一套 Plate 与 Gate，不能让旧引用形成旁路。
+        /// </summary>
+        private static void ClearExistingClearanceOverrides()
+        {
+            foreach (var plate in Object.FindObjectsByType<EncounterClearancePressurePlate>(
+                         FindObjectsInactive.Include,
+                         FindObjectsSortMode.None))
+            {
+                var root = ResolvePrefabRoot(plate.gameObject);
+                RemoveThirdPartyBehaviours(root,
+                    "Gamekit3D.GameCommands.SendOnTriggerEnter",
+                    "Gamekit3D.InteractOnTrigger");
+                Object.DestroyImmediate(plate);
+            }
+
+            foreach (var gate in Object.FindObjectsByType<EncounterClearanceGate>(
+                         FindObjectsInactive.Include,
+                         FindObjectsSortMode.None))
+            {
+                var serializedGate = new SerializedObject(gate);
+                var movingPart = serializedGate.FindProperty("movingPart").objectReferenceValue as Transform;
+                if (movingPart != null)
+                {
+                    var source = PrefabUtility.GetCorrespondingObjectFromSource(movingPart);
+                    if (source != null)
+                    {
+                        movingPart.localPosition = source.localPosition;
+                        EditorUtility.SetDirty(movingPart);
+                    }
+                }
+
+                var root = ResolvePrefabRoot(gate.gameObject);
+                RemoveThirdPartyBehaviours(root,
+                    "Gamekit3D.GameCommands.SimpleTranslator",
+                    "Gamekit3D.GameCommands.GameCommandReceiver");
+                Object.DestroyImmediate(gate);
+            }
+        }
+
+        private static string GetHierarchyPath(Transform transform)
+        {
+            var names = new Stack<string>();
+            for (var current = transform; current != null; current = current.parent)
+            {
+                names.Push(current.name);
+            }
+
+            return string.Join("/", names);
+        }
+
+        private static GameObject ResolvePrefabRoot(GameObject candidate)
+        {
+            // 只接管最近一层 PressurePad/DoorHuge Prefab，避免误伤外层房间 Prefab 中的其他机关。
+            return PrefabUtility.GetNearestPrefabInstanceRoot(candidate) ?? candidate;
+        }
+
+        private static void RemoveThirdPartyBehaviours(GameObject root, params string[] typeNames)
         {
             var names = new HashSet<string>(typeNames, StringComparer.Ordinal);
-            foreach (var behaviour in root.GetComponentsInChildren<MonoBehaviour>(true))
+            var matchedBehaviours = root.GetComponentsInChildren<MonoBehaviour>(true)
+                .Where(behaviour => behaviour != null && names.Contains(behaviour.GetType().FullName))
+                // GameCommandReceiver 被 SimpleTranslator 依赖，必须最后删除，否则 Unity 会拒绝移除组件。
+                .OrderBy(behaviour => behaviour.GetType().FullName ==
+                                      "Gamekit3D.GameCommands.GameCommandReceiver")
+                .ToArray();
+            foreach (var behaviour in matchedBehaviours)
             {
-                if (behaviour != null && names.Contains(behaviour.GetType().FullName))
-                {
-                    behaviour.enabled = false;
-                    EditorUtility.SetDirty(behaviour);
-                }
+                Object.DestroyImmediate(behaviour);
             }
         }
 
