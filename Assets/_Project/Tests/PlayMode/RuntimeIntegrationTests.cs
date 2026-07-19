@@ -591,7 +591,7 @@ namespace Odyssey.Tests.PlayMode
                 "怪物进入 Chase 后没有实际缩短与玩家的距离");
 
             Assert.That(UnityEngine.AI.NavMesh.SamplePosition(
-                    enemy.transform.position + chaseDirection.normalized * 1.2f,
+                    enemy.transform.position + chaseDirection.normalized * 1.8f,
                     out var attackPoint,
                     2f,
                     queryFilter),
@@ -602,12 +602,12 @@ namespace Odyssey.Tests.PlayMode
             yield return new WaitForSeconds(0.15f);
             Assert.That(enemy.CurrentGoal, Is.EqualTo(EnemyGoal.Attack),
                 "玩家进入攻击范围后，场景怪物没有从 Chase 切换到 Attack");
-            yield return new WaitForSeconds(0.8f);
+            yield return new WaitForSeconds(0.15f);
             Assert.That(player.CurrentHealth, Is.EqualTo(healthBeforeAttack),
-                "Chomper 的伤害早于咬合动作接触玩家");
-            yield return new WaitForSeconds(1f);
+                "Chomper 的伤害在攻击动作刚开始时就提前结算");
+            yield return new WaitForSeconds(0.45f);
             Assert.That(player.CurrentHealth, Is.LessThan(healthBeforeAttack),
-                "Chomper 没有在官方 AttackBegin 咬合帧或代码后备时刻结算伤害");
+                "Chomper 主动攻击后仍未在 0.6 秒内结算伤害");
 
             MovePlayer(player, enemy.transform.position + Vector3.forward * (enemy.ForgetRange + 3f));
             yield return new WaitForSeconds(0.25f);

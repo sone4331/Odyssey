@@ -47,8 +47,6 @@ namespace Odyssey.Characters.Enemies
         private EnemyPerception _perception;
         private EnemyActionRuntime _actions;
         private EnemyPatrolRoute _patrolRoute;
-        private bool _meleeDamageCommitted;
-        private float _meleeDamageReadyAt;
         private bool _isDead;
         private Vector3 _deathFlyDirection;
         private float _deathFlySpeed;
@@ -145,8 +143,7 @@ namespace Odyssey.Characters.Enemies
             _actions.ConfigureAttack(
                 _attackMode,
                 _attackWindup,
-                BeginMeleeAttackSequence,
-                AttackBegin,
+                CommitMeleeDamage,
                 LaunchProjectile,
                 SetAttackTelegraph);
             _appliedConfig = config;
@@ -189,18 +186,12 @@ namespace Odyssey.Characters.Enemies
         }
 
         /// <summary>
-        /// 由代码前摇或兼容的攻击动画事件调用；每次攻击序列只允许提交一次近战伤害。
-        /// 命中帧会重新校验目标距离与正面夹角，避免前摇期间玩家已经闪开却仍被提前或背后结算。
+        /// 在配置的攻击前摇结束时提交一次近战伤害。
+        /// 采用代码计时作为唯一权威来源，避免第三方动画事件与行为层重复等待；命中时仍复核距离与朝向。
         /// </summary>
-        public void AttackBegin()
+        private void CommitMeleeDamage()
         {
-            if (_isDead || _attackMode != EnemyAttackMode.Melee || _meleeDamageCommitted)
-            {
-                return;
-            }
-
-            // 官方动画事件只提供表现时刻；若事件早于配置的咬合前摇，等待代码计时后备再结算，避免“牙齿未合上先掉血”。
-            if (Time.time + 0.02f < _meleeDamageReadyAt)
+            if (_isDead || _attackMode != EnemyAttackMode.Melee)
             {
                 return;
             }
@@ -225,7 +216,6 @@ namespace Odyssey.Characters.Enemies
                 return;
             }
 
-            _meleeDamageCommitted = true;
             player.TakeDamage(AttackDamage, transform.position);
         }
 
@@ -276,8 +266,7 @@ namespace Odyssey.Characters.Enemies
             _actions.ConfigureAttack(
                 _attackMode,
                 _attackWindup,
-                BeginMeleeAttackSequence,
-                AttackBegin,
+                CommitMeleeDamage,
                 LaunchProjectile,
                 SetAttackTelegraph);
         }
@@ -318,12 +307,6 @@ namespace Odyssey.Characters.Enemies
                 _agent.enabled = false;
                 Debug.LogError("怪物启用 NavMeshAgent 后仍未绑定到对应类型的网格。", this);
             }
-        }
-
-        private void BeginMeleeAttackSequence()
-        {
-            _meleeDamageCommitted = false;
-            _meleeDamageReadyAt = Time.time + Mathf.Max(0f, _attackWindup);
         }
 
         private void Die()
@@ -416,7 +399,8 @@ namespace Odyssey.Characters.Enemies
             transform.localScale = Vector3.Lerp(transform.localScale, Vector3.zero, Time.deltaTime * 3f);
         }
 
-        // 以下方法匹配现有 Animation Event；命中逻辑只由 AttackBegin 执行，其他事件不承担玩法规则。
+        // 以下公开方法只用于兼容 3D Game Kit Lite 动画事件；玩法伤害统一由代码前摇提交。
+        public void AttackBegin() { }
         public void AttackEnd() { }
         public void PlayStep() { }
         public void Grunt() { }

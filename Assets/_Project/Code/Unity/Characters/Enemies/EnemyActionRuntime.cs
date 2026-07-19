@@ -35,7 +35,6 @@ namespace Odyssey.Characters.Enemies
         private float _attackWindup;
         private float _pendingAttackRemaining = -1f;
         private Vector3 _pendingTargetPosition;
-        private Action _beginMeleeAttack;
         private Action _applyMeleeDamage;
         private Action<Vector3> _launchProjectile;
         private Action<bool> _setTelegraph;
@@ -75,19 +74,18 @@ namespace Odyssey.Characters.Enemies
         public void ConfigurePatrol(EnemyPatrolRoute patrolRoute) => _patrolRoute = patrolRoute;
 
         /// <summary>
-        /// 注入近战或投射物攻击策略。权威命中由代码前摇触发，Animator 只负责表现，不依赖第三方动画事件。
+        /// 注入近战或投射物攻击策略。权威命中只由代码前摇触发，Animator 只负责表现。
+        /// 采用单一计时源可以避免动画事件与代码各等待一次，确保单机与 Host 使用完全一致的伤害时刻。
         /// </summary>
         public void ConfigureAttack(
             EnemyAttackMode attackMode,
             float attackWindup,
-            Action beginMeleeAttack,
             Action applyMeleeDamage,
             Action<Vector3> launchProjectile,
             Action<bool> setTelegraph)
         {
             _attackMode = attackMode;
             _attackWindup = Mathf.Max(0f, attackWindup);
-            _beginMeleeAttack = beginMeleeAttack;
             _applyMeleeDamage = applyMeleeDamage;
             _launchProjectile = launchProjectile;
             _setTelegraph = setTelegraph;
@@ -223,11 +221,6 @@ namespace Odyssey.Characters.Enemies
                 _pendingTargetPosition = _target.position + Vector3.up * 0.75f;
                 _setTelegraph?.Invoke(true);
             }
-            else
-            {
-                _beginMeleeAttack?.Invoke();
-            }
-
             PlayAnimation("Attack", 0.08f);
             return BehaviorStatus.Running;
         }

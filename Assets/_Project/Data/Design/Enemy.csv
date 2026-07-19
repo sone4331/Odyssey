@@ -1,3 +1,3 @@
 id,chaseRange,attackRange,maxHealth,attackDamage,attackCooldown,attackMode,minimumAttackRange,projectileSpeed,attackWindup
-chomper,10,2,3,1,2,近战,0,0,1.55
+chomper,10,2,3,1,2,近战,0,0,0.45
 spitter,12,8,3,1,2.4,投射物,3.5,12,0.55
