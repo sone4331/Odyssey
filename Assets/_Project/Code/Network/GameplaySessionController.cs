@@ -115,6 +115,9 @@ namespace Odyssey.Networking
             return CompleteStart(_manager.StartHost());
         }
 
+        /// <summary>
+        /// 将 Unity Transport 配置为本机监听后启动 Host；连接审批始终由 Host 持有，Client 不参与房间容量判定。
+        /// </summary>
         public bool StartHost()
         {
             if (!PrepareStart(GameplaySessionMode.Host, _unityTransport))
@@ -128,6 +131,9 @@ namespace Odyssey.Networking
             return CompleteStart(_manager.StartHost());
         }
 
+        /// <summary>
+        /// 只接受 IPv4 地址并复用当前场景的 Transport。启动失败不保留 Client 模式，菜单可继续提示用户重试。
+        /// </summary>
         public bool StartClient(string ipv4)
         {
             if (!IsValidIpv4(ipv4) || !PrepareStart(GameplaySessionMode.Client, _unityTransport))
@@ -210,6 +216,9 @@ namespace Odyssey.Networking
                    address.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork;
         }
 
+        /// <summary>
+        /// 在任何 NGO 启动调用前原子设置模式、传输和 UI 状态；已有监听时拒绝重入，避免两种模式同时拥有同一 NetworkManager。
+        /// </summary>
         private bool PrepareStart(GameplaySessionMode mode, NetworkTransport transport)
         {
             if (_manager == null || _manager.IsListening || transport == null)
@@ -236,6 +245,10 @@ namespace Odyssey.Networking
             return started;
         }
 
+        /// <summary>
+        /// Host 按当前模式的容量批准连接，并一次性分配玩家对象和出生位置。
+        /// 单人模式容量为一，联机模式固定为两人；限制在会话边界而非客户端 UI 中执行。
+        /// </summary>
         private void ApproveConnection(
             NetworkManager.ConnectionApprovalRequest request,
             NetworkManager.ConnectionApprovalResponse response)

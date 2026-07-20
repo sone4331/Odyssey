@@ -126,6 +126,10 @@ namespace Odyssey.Gameplay.AI
 
         public string CurrentPath => _runner.CurrentPath;
 
+        /// <summary>
+        /// 先冻结本帧决策所需的时间参数，运行行为树后再一次提交目标和可读路径。
+        /// 行为树只能消费 Blackboard 快照，不能直接访问 Unity 场景，因此同一决策可在纯 C# 规格中复现。
+        /// </summary>
         public void Tick(float currentTime, float attackCooldown, float deltaTime)
         {
             _context.CurrentTime = currentTime;
@@ -135,6 +139,10 @@ namespace Odyssey.Gameplay.AI
             _blackboard.CommitBehavior(_pendingGoal, _runner.CurrentPath);
         }
 
+        /// <summary>
+        /// 按死亡、受击、交战、巡逻、待机的优先级构造反应式树。
+        /// 高优先级分支每帧重新评估，保证死亡和受击能立即中断旧动作，而不是等待巡逻或攻击自然结束。
+        /// </summary>
         private BehaviorNode<EnemyBehaviorContext> BuildTree()
         {
             return new ReactiveSelector<EnemyBehaviorContext>(

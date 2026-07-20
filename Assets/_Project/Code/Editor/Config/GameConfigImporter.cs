@@ -117,6 +117,10 @@ namespace Odyssey.Editor.Config
             return CsvTableParser.Parse(File.ReadAllText(assetPath));
         }
 
+        /// <summary>
+        /// 聚合所有记录的领域校验错误后再拒绝导入，使策划一次修复完整表，而不是每次只看到第一个错误。
+        /// ID 唯一性跨表校验，防止运行时按配置 ID 绑定时出现歧义。
+        /// </summary>
         private static void Validate(IEnumerable<PlayerConfigEntry> players, IEnumerable<EnemyConfigEntry> enemies)
         {
             var ids = new HashSet<string>(StringComparer.Ordinal);

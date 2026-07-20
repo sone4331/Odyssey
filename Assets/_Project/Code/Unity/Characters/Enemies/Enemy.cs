@@ -83,6 +83,10 @@ namespace Odyssey.Characters.Enemies
             EnsureNavigationReady();
         }
 
+        /// <summary>
+        /// 固定按“动作计时 → 感知快照 → 行为树决策 → 表现”推进，避免行为树在同一帧读取到半更新的场景事实。
+        /// 死亡后的表现仍可运行，但不再推进正常 AI 行为。
+        /// </summary>
         private void Update()
         {
             _actions.TickTimers(Time.deltaTime);
@@ -273,6 +277,10 @@ namespace Odyssey.Characters.Enemies
             }
         }
 
+        /// <summary>
+        /// 死亡只提交一次：停止导航和攻击、发布击杀事件，并将对象销毁权交给单机或网络适配器。
+        /// Enemy 不主动 Destroy 自己，才能让 Host 控制网络对象的销毁时机。
+        /// </summary>
         private void Die()
         {
             _isDead = true;

@@ -58,6 +58,10 @@ namespace Odyssey.Gameplay.Save
             }
         }
 
+        /// <summary>
+        /// 从存档声明的版本逐步迁移到当前版本，并在每一步后验证版本恰好前进一格。
+        /// 不允许跳版本或倒退，防止迁移实现遗漏中间字段时仍产出看似成功的存档。
+        /// </summary>
         public void Migrate(TSave save)
         {
             if (save == null)

@@ -161,6 +161,9 @@ namespace Odyssey.Gameplay.Config
         private readonly Dictionary<Type, Dictionary<string, IConfigRecord>> _records =
             new Dictionary<Type, Dictionary<string, IConfigRecord>>();
 
+        /// <summary>
+        /// 在构建期按具体记录类型与 ID 建立索引；重复或缺失 ID 立即失败，运行时查询不再猜测覆盖顺序。
+        /// </summary>
         public GameConfigDatabase(params IConfigRecord[] records)
         {
             foreach (var record in records ?? Array.Empty<IConfigRecord>())
@@ -186,6 +189,10 @@ namespace Odyssey.Gameplay.Config
             }
         }
 
+        /// <summary>
+        /// 用于“该配置必须存在”的装配路径；缺失时抛出包含类型和 ID 的错误，以便尽早暴露资源配置问题。
+        /// 可选查询应使用 TryGet，避免把正常分支写成异常控制流。
+        /// </summary>
         public T Get<T>(string id) where T : class, IConfigRecord
         {
             if (!TryGet<T>(id, out var record))

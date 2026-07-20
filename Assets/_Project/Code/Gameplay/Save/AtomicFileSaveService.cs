@@ -65,6 +65,10 @@ namespace Odyssey.Gameplay.Save
             }
         }
 
+        /// <summary>
+        /// 读取失败统一返回 false，而不把文件系统或反序列化异常泄漏给菜单层。
+        /// 调用方据此保留当前运行态或提示无可用存档；损坏文件的诊断责任仍属于更上层工具。
+        /// </summary>
         public bool TryLoad(out TSave data)
         {
             data = null;

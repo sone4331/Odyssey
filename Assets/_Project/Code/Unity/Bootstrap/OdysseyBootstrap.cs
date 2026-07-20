@@ -18,6 +18,10 @@ namespace Odyssey.Bootstrap
         private GameConfigAsset _configs;
         private ApplicationContext _context;
 
+        /// <summary>
+        /// 在首个场景加载前创建唯一应用组合根；静态入口只创建 GameObject，不承载任何业务服务。
+        /// 这样场景可以保持可编辑，应用级对象又能跨场景存活。
+        /// </summary>
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
         private static void Install()
         {
@@ -31,6 +35,9 @@ namespace Odyssey.Bootstrap
             root.AddComponent<OdysseyBootstrap>();
         }
 
+        /// <summary>
+        /// 读取只读配置并创建存档服务，再登记场景回调；配置缺失时停止装配，避免角色带着半初始化依赖运行。
+        /// </summary>
         private void Awake()
         {
             DontDestroyOnLoad(gameObject);

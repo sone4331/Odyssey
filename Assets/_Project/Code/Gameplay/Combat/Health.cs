@@ -19,6 +19,10 @@ namespace Odyssey.Gameplay.Combat
         public bool IsDead => Current <= 0;
         public event Action<HealthChanged> Changed;
 
+        /// <summary>
+        /// 先拒绝死亡后或无效请求，再一次性提交扣血并发布变化事件。
+        /// 事件只在生命值实际变化后触发，使调用方可把“命中被接受”和“界面需要刷新”视为同一领域事实。
+        /// </summary>
         public DamageResult Apply(DamageRequest request)
         {
             if (IsDead || request.Amount <= 0)
@@ -33,6 +37,9 @@ namespace Odyssey.Gameplay.Combat
             return new DamageResult(true, appliedAmount, IsDead);
         }
 
+        /// <summary>
+        /// 将恢复量夹在最大生命内；满血和无效恢复保持无副作用，避免网络或 UI 收到伪造的生命变化事件。
+        /// </summary>
         public int Restore(int amount, string sourceId)
         {
             if (amount <= 0 || Current >= Maximum)

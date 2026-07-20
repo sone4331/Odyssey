@@ -58,6 +58,10 @@ namespace Odyssey.Networking
             _player = GetComponent<PlayerController>();
         }
 
+        /// <summary>
+        /// 在网络对象生成后完成一次装配：先恢复场景依赖，再根据会话模式选择单机本地规则或双人 Host 权威端口。
+        /// 该分支是复用同一 Player Prefab 的关键，SinglePlayerTransport 不会意外改变已验证的单机存档与复活语义。
+        /// </summary>
         public override void OnNetworkSpawn()
         {
             _session = FindFirstObjectByType<GameplaySessionController>();
@@ -143,6 +147,9 @@ namespace Odyssey.Networking
             }
         }
 
+        /// <summary>
+        /// 接收 Owner 动画命中窗口并发送命令序号；此处不做命中查询或扣血，避免本机表现提前成为玩法事实。
+        /// </summary>
         public void Resolve(PlayerController player, int comboIndex)
         {
             if (!IsOwner || player != _player)
@@ -155,6 +162,10 @@ namespace Odyssey.Networking
             RequestAttackServerRpc(++_localAttackSequence, comboIndex);
         }
 
+        /// <summary>
+        /// 只允许 Host 改写网络生命和无敌截止时间，再把已提交的结果广播给客户端表现。
+        /// 同一入口覆盖接触与投射物伤害，确保无敌窗口不会因伤害来源不同而失效。
+        /// </summary>
         public DamageResult TryTakeDamage(int damage, Vector3 attackerPosition, string sourceId)
         {
             if (!IsServer || _health.Value <= 0 || damage <= 0)
@@ -206,6 +217,10 @@ namespace Odyssey.Networking
             TryTakeDamage(enemy.AttackDamage, enemy.transform.position, "enemy_contact");
         }
 
+        /// <summary>
+        /// 将 Owner 的攻击意图转为 Host 判定：验证发送者、序号、连击、冷却、目标和距离后才执行范围命中。
+        /// 即使请求被拒绝也回传结果，Owner 可以保持动画表现并显示可调试的拒绝原因。
+        /// </summary>
         [ServerRpc]
         private void RequestAttackServerRpc(uint sequence, int comboIndex, ServerRpcParams rpcParams = default)
         {
@@ -251,6 +266,10 @@ namespace Odyssey.Networking
             SendAttackResult(OwnerClientId, sequence, decision);
         }
 
+        /// <summary>
+        /// 冲刺请求只更新 Host 的无敌/冷却时间轴；实际位移仍由 Owner 的表现同步承担。
+        /// 这使手感和可影响伤害的规则分别拥有唯一写入者。
+        /// </summary>
         [ServerRpc]
         private void RequestDashServerRpc(uint sequence, ServerRpcParams rpcParams = default)
         {
@@ -298,6 +317,10 @@ namespace Odyssey.Networking
             return nearest;
         }
 
+        /// <summary>
+        /// 在 Host 以 NonAlloc 球形查询复核攻击范围，并按 Enemy 去重后提交统一伤害入口。
+        /// Collider 缓冲区只是查询优化；真正的目标合法性已由前置规则和前方夹角共同限制。
+        /// </summary>
         private void ApplyAttackToEnemies()
         {
             var center = transform.position + transform.forward + Vector3.up * 0.5f;
@@ -324,6 +347,10 @@ namespace Odyssey.Networking
             }
         }
 
+        /// <summary>
+        /// 死亡后仅由 Host 等待、选取出生点和恢复生命，再定向通知 Owner 修正位置与表现。
+        /// 复活期间屏蔽重复接触伤害，防止多帧碰撞启动多个协程。
+        /// </summary>
         private IEnumerator RespawnOnHost()
         {
             _respawning = true;

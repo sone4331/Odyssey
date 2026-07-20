@@ -116,6 +116,9 @@ namespace Odyssey.Characters.Player
         public event Action<DamageRequest> DamageEvaded;
         public event Action DashAuthorityRequested;
 
+        /// <summary>
+        /// 缓存同一角色生命周期内复用的 Unity 组件并建立领域运行时；不在这里查找全局服务，配置由 Installer 后续注入。
+        /// </summary>
         private void Awake()
         {
             Controller = GetComponent<CharacterController>();
@@ -169,6 +172,9 @@ namespace Odyssey.Characters.Player
             _started = true;
         }
 
+        /// <summary>
+        /// 仅由拥有本机输入的角色驱动两条状态轴；远端角色改由网络动画和同步结果表现，避免双重模拟。
+        /// </summary>
         private void Update()
         {
             if (!_started || _isDead)
@@ -626,6 +632,10 @@ namespace Odyssey.Characters.Player
                 AttackAdvanceSpeed);
         }
 
+        /// <summary>
+        /// 当 Inspector 默认配置或导入配置生效时，以同一份数据重建领域运行时并保留合法生命值。
+        /// 重建集中在此处，避免配置绑定、复活和网络装配各自创建不一致的 Ability 或 Health 实例。
+        /// </summary>
         private void RebuildRuntimeSystems(PlayerConfigData config, int healthToPreserve)
         {
             if (_runtime != null)
